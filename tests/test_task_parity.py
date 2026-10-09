@@ -71,6 +71,10 @@ NOT_LOCOMOTION = {
     # set of its own. Set beside the four it would be measuring a leg count, not a
     # gait.
     "jumper.five_foot",
+    # The simulation-only barista reference builds on five-foot manipulation and
+    # swaps in a task-local audited actuator. It is evidence for a fixed grasp/pour
+    # trajectory, not a fifth gait control.
+    "jumper.barista",
     # Stands on a swing and pumps it: no command, so none of the tracking,
     # gait-gated or curriculum terms the four share survive, and the three terms
     # it does share had to be rewritten against the deck because the floor tilts.
