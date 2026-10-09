@@ -1,0 +1,1 @@
+"""Machine-readable verification tools for the simulated barista motion."""

@@ -22,23 +22,40 @@
       "height_m": 0.08,
       "design_mass_kg": 0.25,
       "simulation_behavior": "static",
-      "position_m": [0.32, 0.14, 0.0]
+      "position_m": [0.38, 0.16, 0.0]
     },
     "v60": {
       "maximum_diameter_m": 0.1,
       "height_m": 0.09,
       "design_mass_kg": 0.12,
       "simulation_behavior": "static",
-      "position_m": [0.32, 0.14, 0.08],
+      "position_m": [0.38, 0.16, 0.08],
       "coffee_bed_target_radius_m": 0.038
     },
     "pitcher": {
       "body_outer_diameter_m": 0.056,
       "body_height_m": 0.08,
       "spout_reach_from_axis_m": 0.129,
-      "dry_mass_kg": 0.24,
+      "base_vessel_mass_kg": 0.24,
+      "dry_mass_kg": 0.264,
       "simulation_behavior": "free rigid body",
-      "initial_position_m": [0.3, -0.18, 0.001]
+      "initial_position_m": [0.18698, 0.02047, 0.001]
+    },
+    "pitcher_top_grip_addon": {
+      "material": "PETG",
+      "manufacturing": "single 3D-printed bridge with two rim-clamp struts",
+      "bar_centreline_length_m": 0.04,
+      "bar_overall_length_m": 0.064,
+      "bar_diameter_m": 0.024,
+      "bar_centre_m": [0.0, 0.0, 0.115],
+      "bar_axis_body": [-0.895735, -0.432837, -0.101541],
+      "strut_length_m": 0.0371,
+      "strut_diameter_m": 0.008,
+      "mass_kg": 0.024,
+      "bar_mass_kg": 0.017,
+      "strut_mass_each_kg": 0.0035,
+      "centred_over_loaded_pitcher_com_xy": true,
+      "simulation_behavior": "rigid part of free pitcher; ordinary contact geometry"
     },
     "nominal_water": {
       "volume_mL": 180,
@@ -48,19 +65,22 @@
     }
   },
   "payload_check": {
-    "pitcher_dry_mass_kg": 0.24,
+    "base_vessel_mass_kg": 0.24,
+    "grip_addon_mass_kg": 0.024,
+    "pitcher_dry_mass_kg": 0.264,
     "nominal_water_mass_kg": 0.18,
-    "pitcher_plus_water_mass_kg": 0.42,
+    "pitcher_plus_water_mass_kg": 0.444,
     "design_limit_kg": 0.45,
-    "margin_kg": 0.03,
+    "margin_kg": 0.006,
     "passes": true
   },
   "standing_slot": {
     "position_m": [0.0, 0.0, 0.0],
     "yaw_deg": 0.0,
     "clear_diameter_m": 0.5,
-    "nearest_prop_centre_distance_m": 0.349285,
-    "nearest_prop_surface_distance_m": 0.299285,
-    "clear_boundary_margin_m": 0.049285
+    "nearest_fixed_prop_centre_distance_m": 0.412311,
+    "nearest_fixed_prop_surface_distance_m": 0.362311,
+    "fixed_prop_clear_boundary_margin_m": 0.112311,
+    "free_pitcher_is_inside_marked_boundary": true
   }
 }

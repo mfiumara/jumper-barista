@@ -16,7 +16,7 @@
     "assetDir": ".",
     "terrainType": "none",
     "counts": {
-      "geoms": 18,
+      "geoms": 21,
       "bodies": 3,
       "lights": 2
     },
@@ -39,7 +39,10 @@
       "v60_3",
       "v60_4",
       "v60_5",
-      "pitcher_body"
+      "pitcher_body",
+      "top_grip_bar",
+      "top_grip_strut_a",
+      "top_grip_strut_b"
     ],
     "ground": {
       "geom": "counter_surface"
@@ -54,8 +57,8 @@
       "body": "pitcher",
       "freeJoint": true,
       "position": [
-        0.3,
-        -0.18,
+        0.18698,
+        0.02047,
         0.001
       ],
       "geoms": [
@@ -67,7 +70,10 @@
         "spout_tip",
         "handle_upper",
         "handle_outer",
-        "handle_lower"
+        "handle_lower",
+        "top_grip_bar",
+        "top_grip_strut_a",
+        "top_grip_strut_b"
       ]
     }
   ],
@@ -86,8 +92,8 @@
   },
   "files": {
     "scene.xml": {
-      "bytes": 5773,
-      "sha256": "18152b5a456d874c78fc891dd039ce9d542e0364afdf4a26c6953031146449e6"
+      "bytes": 6727,
+      "sha256": "23b7e7e54ea216fcdd3363ecec4fd338ab9745d9aebb3963ea424d717cb8b886"
     }
   }
 }

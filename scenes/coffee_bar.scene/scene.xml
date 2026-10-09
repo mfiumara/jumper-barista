@@ -4,7 +4,8 @@
   <!--
     Original project-owned primitive geometry. Dimensions are in metres and masses in
     kilograms. The complete design table is barista/coffee_scene_dimensions.json.
-    The pitcher carries 0.240 kg dry mass plus 0.180 kg nominal water mass = 0.420 kg.
+    The pitcher carries 0.240 kg vessel mass, a 0.024 kg printed grip add-on,
+    and 0.180 kg nominal water mass = 0.444 kg.
   -->
   <asset>
     <texture name="counter_checker" type="2d" builtin="checker" width="256" height="256"
@@ -46,8 +47,8 @@
     <site name="jumper_forward" pos="0.20 0 0.002" type="sphere"
           size="0.008" rgba="0.25 0.65 0.42 0.7" group="4"/>
 
-    <!-- Static 90 mm diameter, 80 mm tall server centred at (0.32, 0.14). -->
-    <body name="server" pos="0.32 0.14 0">
+    <!-- Static 90 mm diameter, 80 mm tall server centred at (0.38, 0.16). -->
+    <body name="server" pos="0.38 0.16 0">
       <geom name="server_body" class="fixed_prop" type="cylinder" pos="0 0 0.04"
             size="0.045 0.04" mass="0.250" material="glass"/>
       <geom name="server_handle" class="fixed_prop" type="capsule"
@@ -57,7 +58,7 @@
     </body>
 
     <!-- Static stepped V60 proxy: 100 mm maximum diameter and 90 mm high. -->
-    <body name="v60" pos="0.32 0.14 0.08">
+    <body name="v60" pos="0.38 0.16 0.08">
       <geom name="v60_1" class="fixed_prop" type="cylinder" pos="0 0 0.009"
             size="0.022 0.009" mass="0.024" material="ceramic_white"/>
       <geom name="v60_2" class="fixed_prop" type="cylinder" pos="0 0 0.027"
@@ -77,7 +78,7 @@
       carries the 0.240 kg dry mass. An invisible interior cylinder carries the
       0.180 kg nominal water mass; this is a rigid mass proxy, not simulated fluid.
     -->
-    <body name="pitcher" pos="0.30 -0.18 0.001">
+    <body name="pitcher" pos="0.18698 0.02047 0.001">
       <freejoint name="pitcher_free"/>
       <geom name="pitcher_body" type="cylinder" pos="0 0 0.040" size="0.028 0.040"
             mass="0.240" material="steel" friction="0.9 0.01 0.001"/>
@@ -99,7 +100,22 @@
             fromto="0 -0.065 0.064 0 -0.065 0.024" size="0.005"/>
       <geom name="handle_lower" class="pitcher_visual" type="capsule"
             fromto="0 -0.065 0.024 0 -0.025 0.024" size="0.005"/>
-      <site name="pitcher_grip" pos="0 -0.030 0.045" size="0.006"
+
+      <!--
+        Original 3D-printable PETG bridge: a 64 mm x 24 mm hollow top bar over the
+        loaded pitcher's centre of mass, with two 8 mm rim-clamp struts. Its
+        three symmetric pieces total 0.024 kg and remain ordinary contact geoms.
+      -->
+      <geom name="top_grip_bar" type="capsule"
+            fromto="-0.017915 -0.008657 0.112969 0.017915 0.008657 0.117031" size="0.012"
+            mass="0.017" rgba="0.12 0.12 0.11 1" friction="0.8 0.005 0.0001"/>
+      <geom name="top_grip_strut_a" type="capsule"
+            fromto="-0.017915 -0.008657 0.078 -0.017915 -0.008657 0.112969" size="0.004"
+            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="0.8 0.005 0.0001"/>
+      <geom name="top_grip_strut_b" type="capsule"
+            fromto="0.017915 0.008657 0.078 0.017915 0.008657 0.117031" size="0.004"
+            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="0.8 0.005 0.0001"/>
+      <site name="pitcher_grip" pos="0 0 0.115" size="0.006"
             rgba="0.95 0.45 0.15 1" group="4"/>
       <site name="pitcher_spout_tip" pos="0 0.129 0.110" size="0.004"
             rgba="0.20 0.48 0.62 1" group="4"/>

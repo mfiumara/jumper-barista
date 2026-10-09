@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "seed": 31001,
+  "physics_dt_s": 0.005,
+  "control_dt_s": 0.02,
+  "render_fps": 50,
+  "provenance": {
+    "integration_base_sha": "b4f1f8b9dcb21266e9488733cc498396e721e512",
+    "accepted_architecture_sha": "e24d63e2d8f42f1e9faddfc6c23ca7828648ae2c",
+    "accepted_scene_sha": "69793298fe922c6dcf682384c2524f8db08615b6"
+  },
+  "source": {
+    "method": "deterministic Cartesian keyframes with offline MuJoCo kinematic solve",
+    "residual_rl": false,
+    "lift_constraint": "vertical claw-mouth translation with rotation concentrated about the grip-bar axis"
+  },
+  "base_start": {
+    "position_m": [0.0, 0.0, 0.10647],
+    "yaw_rad": 0.0
+  },
+  "arm_joint_order": [
+    "LF_J0_joint",
+    "LF_J1_joint",
+    "LF_J2_joint",
+    "LF_J3_joint"
+  ],
+  "support_lift_rad": {},
+  "keyframes": [
+    {
+      "phase": "settle",
+      "end_s": 1.0,
+      "arm_rad": [-0.15312210, -1.80000000, -0.25662340, -1.91250000],
+      "finger_rad": -0.65
+    },
+    {
+      "phase": "approach",
+      "end_s": 3.0,
+      "arm_rad": [-0.5236, -1.8000, -0.5236, -1.3090],
+      "finger_rad": -0.65
+    },
+    {
+      "phase": "close",
+      "end_s": 4.0,
+      "arm_rad": [-0.5236, -1.8000, -0.5236, -1.3090],
+      "finger_rad": -0.50
+    },
+    {
+      "phase": "lift",
+      "end_s": 6.0,
+      "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043],
+      "finger_rad": -0.50
+    },
+    {
+      "phase": "lift_settle",
+      "end_s": 14.0,
+      "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043],
+      "finger_rad": -0.50
+    },
+    {
+      "phase": "hold",
+      "end_s": 17.5,
+      "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043],
+      "finger_rad": -0.50
+    }
+  ],
+  "thresholds": {
+    "lift_m": 0.05,
+    "hold_s": 3.0,
+    "pitcher_tilt_deg": 5.0,
+    "grasp_translation_m": 0.01,
+    "grasp_rotation_deg": 5.0,
+    "base_xy_drift_m": 0.01,
+    "base_roll_pitch_deg": 5.0,
+    "continuous_torque_nm": 1.2,
+    "peak_duration_s": 0.3
+  }
+}
