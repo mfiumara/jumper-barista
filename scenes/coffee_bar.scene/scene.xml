@@ -1,0 +1,108 @@
+<mujoco model="jumper_coffee_bar">
+  <compiler angle="radian" autolimits="true"/>
+
+  <!--
+    Original project-owned primitive geometry. Dimensions are in metres and masses in
+    kilograms. The complete design table is barista/coffee_scene_dimensions.json.
+    The pitcher carries 0.240 kg dry mass plus 0.180 kg nominal water mass = 0.420 kg.
+  -->
+  <asset>
+    <texture name="counter_checker" type="2d" builtin="checker" width="256" height="256"
+             rgb1="0.18 0.12 0.08" rgb2="0.24 0.16 0.10" mark="edge"
+             markrgb="0.32 0.22 0.14"/>
+    <material name="counter_mat" texture="counter_checker" texrepeat="8 5"
+              texuniform="true" reflectance="0.08"/>
+    <material name="ceramic_white" rgba="0.92 0.90 0.84 1" reflectance="0.15"/>
+    <material name="glass" rgba="0.55 0.66 0.68 0.42" reflectance="0.25"/>
+    <material name="steel" rgba="0.48 0.52 0.54 1" reflectance="0.45"/>
+    <material name="water" rgba="0.20 0.48 0.62 0.65"/>
+  </asset>
+
+  <default>
+    <geom condim="4" friction="0.8 0.01 0.001" solref="0.008 1"/>
+    <default class="fixed_prop">
+      <geom contype="1" conaffinity="1"/>
+    </default>
+    <default class="pitcher_visual">
+      <geom material="steel" density="0" contype="0" conaffinity="0" group="2"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <light name="key" pos="-0.4 -0.3 1.2" dir="0.3 0.25 -1" diffuse="0.85 0.78 0.68"/>
+    <light name="fill" pos="0.5 0.1 0.8" dir="-0.4 0 -1" diffuse="0.35 0.42 0.48"/>
+    <camera name="hero" pos="0.95 -0.95 0.62" xyaxes="0.707 0.707 0 -0.30 0.30 0.906"/>
+    <camera name="overhead" pos="0.20 0 1.25" xyaxes="1 0 0 0 1 0"/>
+
+    <!-- 1.20 x 0.80 x 0.04 m counter slab; its top is the local z=0 datum. -->
+    <geom name="counter_surface" class="fixed_prop" type="box" pos="0 0 -0.02"
+          size="0.60 0.40 0.02" material="counter_mat"/>
+    <geom name="counter_back" class="fixed_prop" type="box" pos="0 0.39 0.055"
+          size="0.60 0.01 0.055" material="counter_mat"/>
+
+    <!-- Clear standing slot: 0.50 m diameter, centred at the package spawn. -->
+    <site name="jumper_standing_slot" pos="0 0 0.002" type="cylinder"
+          size="0.25 0.001" rgba="0.25 0.65 0.42 0.12" group="4"/>
+    <site name="jumper_forward" pos="0.20 0 0.002" type="sphere"
+          size="0.008" rgba="0.25 0.65 0.42 0.7" group="4"/>
+
+    <!-- Static 90 mm diameter, 80 mm tall server centred at (0.32, 0.14). -->
+    <body name="server" pos="0.32 0.14 0">
+      <geom name="server_body" class="fixed_prop" type="cylinder" pos="0 0 0.04"
+            size="0.045 0.04" mass="0.250" material="glass"/>
+      <geom name="server_handle" class="fixed_prop" type="capsule"
+            fromto="0.040 0 0.055 0.078 0 0.055" size="0.007" mass="0"
+            material="glass"/>
+      <site name="server_centre" pos="0 0 0.08" size="0.004" rgba="1 0.8 0.2 1" group="4"/>
+    </body>
+
+    <!-- Static stepped V60 proxy: 100 mm maximum diameter and 90 mm high. -->
+    <body name="v60" pos="0.32 0.14 0.08">
+      <geom name="v60_1" class="fixed_prop" type="cylinder" pos="0 0 0.009"
+            size="0.022 0.009" mass="0.024" material="ceramic_white"/>
+      <geom name="v60_2" class="fixed_prop" type="cylinder" pos="0 0 0.027"
+            size="0.029 0.009" mass="0.024" material="ceramic_white"/>
+      <geom name="v60_3" class="fixed_prop" type="cylinder" pos="0 0 0.045"
+            size="0.036 0.009" mass="0.024" material="ceramic_white"/>
+      <geom name="v60_4" class="fixed_prop" type="cylinder" pos="0 0 0.063"
+            size="0.043 0.009" mass="0.024" material="ceramic_white"/>
+      <geom name="v60_5" class="fixed_prop" type="cylinder" pos="0 0 0.081"
+            size="0.050 0.009" mass="0.024" material="ceramic_white"/>
+      <site name="coffee_bed_target" pos="0 0 0.084" type="cylinder"
+            size="0.038 0.001" rgba="0.20 0.08 0.025 1" group="4"/>
+    </body>
+
+    <!--
+      Free pitcher starts on the counter, separate from Jumper. The body collision
+      carries the 0.240 kg dry mass. An invisible interior cylinder carries the
+      0.180 kg nominal water mass; this is a rigid mass proxy, not simulated fluid.
+    -->
+    <body name="pitcher" pos="0.30 -0.18 0.001">
+      <freejoint name="pitcher_free"/>
+      <geom name="pitcher_body" type="cylinder" pos="0 0 0.040" size="0.028 0.040"
+            mass="0.240" material="steel" friction="0.9 0.01 0.001"/>
+      <geom name="nominal_water_mass" type="cylinder" pos="0 0 0.039" size="0.023 0.030"
+            mass="0.180" rgba="0 0 0 0" contype="0" conaffinity="0" group="3"/>
+      <geom name="water_surface" class="pitcher_visual" type="cylinder"
+            pos="0 0 0.069" size="0.023 0.001" material="water"/>
+
+      <geom name="spout_lower" class="pitcher_visual" type="capsule"
+            fromto="0 0.021 0.055 0 0.060 0.082" size="0.006"/>
+      <geom name="spout_riser" class="pitcher_visual" type="capsule"
+            fromto="0 0.060 0.082 0 0.096 0.108" size="0.005"/>
+      <geom name="spout_tip" class="pitcher_visual" type="capsule"
+            fromto="0 0.096 0.108 0 0.125 0.110" size="0.004"/>
+
+      <geom name="handle_upper" class="pitcher_visual" type="capsule"
+            fromto="0 -0.025 0.064 0 -0.065 0.064" size="0.005"/>
+      <geom name="handle_outer" class="pitcher_visual" type="capsule"
+            fromto="0 -0.065 0.064 0 -0.065 0.024" size="0.005"/>
+      <geom name="handle_lower" class="pitcher_visual" type="capsule"
+            fromto="0 -0.065 0.024 0 -0.025 0.024" size="0.005"/>
+      <site name="pitcher_grip" pos="0 -0.030 0.045" size="0.006"
+            rgba="0.95 0.45 0.15 1" group="4"/>
+      <site name="pitcher_spout_tip" pos="0 0.129 0.110" size="0.004"
+            rgba="0.20 0.48 0.62 1" group="4"/>
+    </body>
+  </worldbody>
+</mujoco>
