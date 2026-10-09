@@ -102,19 +102,28 @@
             fromto="0 -0.065 0.024 0 -0.025 0.024" size="0.005"/>
 
       <!--
-        Original 3D-printable PETG bridge: a 64 mm x 24 mm hollow top bar over the
-        loaded pitcher's centre of mass, with two 8 mm rim-clamp struts. Its
-        three symmetric pieces total 0.024 kg and remain ordinary contact geoms.
+        Original 3D-printable PETG bridge: a 64 mm x 24 mm TPU-sleeved top bar over the
+        loaded pitcher's centre of mass, two 28 mm end-stop collars, and two 8 mm
+        rim-clamp struts. The collars prevent lateral jaw walk during the long pour.
+        Its five symmetric pieces total 0.024 kg and remain ordinary contact geoms.
       -->
       <geom name="top_grip_bar" type="capsule"
             fromto="-0.017915 -0.008657 0.112969 0.017915 0.008657 0.117031" size="0.012"
-            mass="0.017" rgba="0.12 0.12 0.11 1" friction="0.8 0.005 0.0001"/>
+            mass="0.015" rgba="0.12 0.12 0.11 1" friction="1.2 0.005 0.0001"/>
+      <geom name="top_grip_collar_a" type="cylinder"
+            fromto="-0.018811 -0.009090 0.112867 -0.017019 -0.008224 0.113071"
+            size="0.014" mass="0.001" rgba="0.12 0.12 0.11 1"
+            friction="1.2 0.005 0.0001"/>
+      <geom name="top_grip_collar_b" type="cylinder"
+            fromto="0.017019 0.008224 0.116929 0.018811 0.009090 0.117133"
+            size="0.014" mass="0.001" rgba="0.12 0.12 0.11 1"
+            friction="1.2 0.005 0.0001"/>
       <geom name="top_grip_strut_a" type="capsule"
             fromto="-0.017915 -0.008657 0.078 -0.017915 -0.008657 0.112969" size="0.004"
-            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="0.8 0.005 0.0001"/>
+            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="1.2 0.005 0.0001"/>
       <geom name="top_grip_strut_b" type="capsule"
             fromto="0.017915 0.008657 0.078 0.017915 0.008657 0.117031" size="0.004"
-            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="0.8 0.005 0.0001"/>
+            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="1.2 0.005 0.0001"/>
       <site name="pitcher_grip" pos="0 0 0.115" size="0.006"
             rgba="0.95 0.45 0.15 1" group="4"/>
       <site name="pitcher_spout_tip" pos="0 0.129 0.110" size="0.004"
