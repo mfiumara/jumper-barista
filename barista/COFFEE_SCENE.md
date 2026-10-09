@@ -26,3 +26,29 @@ The machine-readable source is `barista/coffee_scene_dimensions.json`. In the MJ
 body carries 0.240 kg and an invisible interior cylinder carries 0.180 kg, so the compiled free
 body has the complete 0.420 kg payload mass. The visible water surface and any later stream are
 visual approximations only. This scene does not represent a physical-robot trial.
+
+## Loading and package boundary
+
+The package is registered as `coffee_bar`; list or replay it with the repository's normal scene
+interface:
+
+```bash
+python scripts/train.py --list
+python scripts/play.py --task jumper.gesture_hello --scene coffee_bar \
+  --checkpoint tasks/jumper/gesture_hello/out/example/model_999.pt \
+  --backend native --device cpu --headless --steps 100 --speed 0 --no-obs-noise
+python barista/render_coffee_scene.py --out <output-directory>
+```
+
+The evidence renderer uses `jumper.flat`'s home action and pins its normally randomised planar
+reset to the authored standing slot before a one-second settle; it does not alter the task or the
+scene package.
+
+The current Design workflow was consulted at commit
+`918d192857fcea1678c2a40b339501004a94d838`. New Design exports use
+`kk-scene-package/2` and require a verified complete default `.skin/3`, a reviewed robot-free
+preview, a trusted Jumper profile, and Design's `export-map` plus `verify-package --mujoco` flow.
+This accepted scene is a Train-owned `kk-scene-package/1` made from original MJCF primitives; it
+does not have those Design inputs and must not be renamed or presented as a verified `.map/2`.
+It therefore remains a hash-checked, replay-only MJCF package. A future `.map` export belongs in
+the independent Design repository and must record the exact Design and default-skin inputs used.
