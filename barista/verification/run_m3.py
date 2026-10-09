@@ -185,14 +185,15 @@ def main() -> int:
 
     import imageio_ffmpeg
     import mujoco
+    import torch
     from mjlab.envs import ManagerBasedRlEnv
     from mjrl.backend.resolve import resolve
     from mjrl.backend.select import use_backend
 
     import scenes
     import tasks
-    from tasks.jumper.barista.audited_servo import AuditedServo
-    from tasks.jumper.common.actuator import CURVE
+    from tasks.jumper.barista.audited_servo import AuditedServoCurveActuator
+    from tasks.jumper.common.actuator import CURVE, ServoCurveActuator
     from tasks.jumper.common.constants import HOME
     from tasks.jumper.five_foot.claw import GRIPPER_OPEN, LEAD_PER_SPEED, SQUEEZE_LEAD
     from tasks.jumper.five_foot.objects import PROP_CONE, PROP_IMPRATIO
@@ -208,7 +209,7 @@ def main() -> int:
     use_backend(resolution)
     print(resolution.banner())
 
-    env_cfg = tasks.load_env_cfg("jumper.five_foot", play=True)
+    env_cfg = tasks.load_env_cfg("jumper.barista", play=True)
     env_cfg.seed = seed
     scenes.apply(env_cfg, "coffee_bar")
     env_cfg.scene.num_envs = 1
@@ -219,34 +220,50 @@ def main() -> int:
     model.opt.impratio = PROP_IMPRATIO
     if PROP_CONE != "elliptic":
         raise RuntimeError(f"expected the measured grasp cone to be elliptic, got {PROP_CONE}")
-    data = mujoco.MjData(model)
-    data.qpos[:] = model.qpos0
-    model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_ACTUATION
+    robot = env.scene["robot"]
+    if len(robot.actuators) != 1 or not isinstance(
+        robot.actuators[0], AuditedServoCurveActuator
+    ):
+        raise RuntimeError("jumper.barista did not construct its audited runtime actuator")
+    servo = robot.actuators[0]
 
     joint_ids = {
         name: _ending(model, mujoco, mujoco.mjtObj.mjOBJ_JOINT, "njnt", name)
         for name in HOME
     }
-    compiled_joint_names = [_name(model, mujoco, mujoco.mjtObj.mjOBJ_JOINT, joint_ids[name]) for name in HOME]
-    base_joint = _ending(model, mujoco, mujoco.mjtObj.mjOBJ_JOINT, "njnt", "floating_base")
-    base_qadr = int(model.jnt_qposadr[base_joint])
     base_start = config["base_start"]
     yaw = float(base_start["yaw_rad"])
-    data.qpos[base_qadr:base_qadr + 3] = base_start["position_m"]
-    data.qpos[base_qadr + 3:base_qadr + 7] = [math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)]
-    for name, value in HOME.items():
-        data.qpos[model.jnt_qposadr[joint_ids[name]]] = value
+    root_pose = torch.tensor(
+        [[*base_start["position_m"], math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)]],
+        dtype=torch.float,
+        device=resolution.device,
+    )
+    runtime_joint_col = {name: index for index, name in enumerate(robot.joint_names)}
+    if set(runtime_joint_col) != set(HOME):
+        raise RuntimeError("barista runtime joint set differs from the 22-joint hardware order")
+    initial = np.asarray([HOME[name] for name in robot.joint_names], dtype=np.float64)
     arm_names = config["arm_joint_order"]
     for name, value in zip(arm_names, config["keyframes"][0]["arm_rad"], strict=True):
-        data.qpos[model.jnt_qposadr[joint_ids[name]]] = value
-    data.qpos[model.jnt_qposadr[joint_ids["LF_J4_joint"]]] = GRIPPER_OPEN
-    mujoco.mj_forward(model, data)
+        initial[runtime_joint_col[name]] = value
+    initial[runtime_joint_col["LF_J4_joint"]] = GRIPPER_OPEN
+    initial_t = torch.tensor(initial[None, :], dtype=torch.float, device=resolution.device)
+    robot.write_root_link_pose_to_sim(root_pose)
+    robot.write_joint_state_to_sim(initial_t, torch.zeros_like(initial_t))
+    robot.set_joint_position_target(initial_t)
+    env.sim.forward()
+    env.scene.update(dt=0.0)
+    # Native refresh restores environment 0 into this MjData after every step. It
+    # is the registered runtime's state, not a separate probe data object.
+    data = env.sim._datas[0]
 
-    servo = AuditedServo(model, mujoco, compiled_joint_names)
     joint_order = list(HOME)
     joint_col = {name: index for index, name in enumerate(joint_order)}
     target = np.asarray([HOME[name] for name in joint_order], dtype=np.float64)
     finger_col = joint_col["LF_J4_joint"]
+    audit_col = {name: index for index, name in enumerate(servo.target_names)}
+    if set(audit_col) != set(joint_order):
+        raise RuntimeError("audited actuator does not cover all 22 hardware joints")
+    servo.enable_audit(f"m3-seed-{seed}")
 
     pitcher_body = _ending(model, mujoco, mujoco.mjtObj.mjOBJ_BODY, "nbody", "pitcher")
     base_body = _ending(model, mujoco, mujoco.mjtObj.mjOBJ_BODY, "nbody", "base_link")
@@ -311,8 +328,9 @@ def main() -> int:
                         )
                 for name, value in zip(arm_names, arm, strict=True):
                     target[joint_col[name]] = value
-                finger_q = float(data.qpos[servo.qadr[finger_col]])
-                finger_qd = float(data.qvel[servo.dadr[finger_col]])
+                finger_runtime_col = runtime_joint_col["LF_J4_joint"]
+                finger_q = float(robot.data.joint_pos[0, finger_runtime_col])
+                finger_qd = float(robot.data.joint_vel[0, finger_runtime_col])
                 if finger_request > finger_q:
                     target[finger_col] = min(
                         finger_request,
@@ -321,9 +339,46 @@ def main() -> int:
                 else:
                     target[finger_col] = finger_request
 
-            samples = servo.apply(data, target)
-            for index, (joint, sample) in enumerate(zip(joint_order, samples, strict=True)):
-                magnitude = abs(sample.tau_applied_nm)
+            runtime_target = torch.tensor(
+                [[target[joint_col[name]] for name in robot.joint_names]],
+                dtype=torch.float,
+                device=resolution.device,
+            )
+            robot.set_joint_position_target(runtime_target)
+            servo.set_audit_context(
+                phase=phase,
+                substep=step,
+                control_step=step // CONTROL_DECIMATION,
+                time_s=time_s,
+            )
+            env.scene.write_data_to_sim()
+            env.sim.step()
+            env.scene.update(dt=dt_s)
+            batches = servo.drain_audit()
+            if len(batches) != 1:
+                raise RuntimeError(f"expected one actuator audit batch, got {len(batches)}")
+            batch = batches[0]
+            arrays = {
+                name: getattr(batch, name).detach().cpu().numpy()[0]
+                for name in (
+                    "q_pre_rad",
+                    "qd_pre_rad_s",
+                    "tau_raw_nm",
+                    "tau_applied_nm",
+                    "curve_limit_nm",
+                    "effective_limit_nm",
+                    "thermal_theta_pre",
+                    "thermal_theta_post",
+                )
+            }
+            for index, joint in enumerate(joint_order):
+                column = audit_col[joint]
+                tau_applied = float(arrays["tau_applied_nm"][column])
+                thermal_pre = float(arrays["thermal_theta_pre"][column])
+                thermal_post = float(arrays["thermal_theta_post"][column])
+                curve_limit = float(arrays["curve_limit_nm"][column])
+                effective_limit = float(arrays["effective_limit_nm"][column])
+                magnitude = abs(tau_applied)
                 above = magnitude > CURVE.continuous_torque
                 if above and above_elapsed[index] == 0.0:
                     next_window[index] += 1
@@ -333,34 +388,35 @@ def main() -> int:
                 else:
                     above_window[index] = 0
                     above_elapsed[index] = 0.0
-                thermal_recomputed = sample.thermal_theta_pre + (
-                    (sample.tau_applied_nm / CURVE.continuous_torque) ** 2
-                    - sample.thermal_theta_pre
+                thermal_recomputed = thermal_pre + (
+                    (tau_applied / CURVE.continuous_torque) ** 2
+                    - thermal_pre
                 ) * (dt_s / CURVE.thermal_time_constant)
-                curve_margin = sample.curve_limit_nm - magnitude
-                effective_margin = sample.effective_limit_nm - magnitude
+                curve_margin = curve_limit - magnitude
+                effective_margin = effective_limit - magnitude
                 torque_rows.append({
-                    "run_id": f"m3-seed-{seed}", "phase": phase, "joint": joint,
-                    "substep": step, "control_step": step // CONTROL_DECIMATION,
-                    "time_s": time_s, "dt_s": dt_s,
-                    "q_pre_rad": sample.q_pre_rad, "qd_pre_rad_s": sample.qd_pre_rad_s,
-                    "tau_raw_nm": sample.tau_raw_nm, "tau_applied_nm": sample.tau_applied_nm,
-                    "curve_limit_nm": sample.curve_limit_nm,
+                    "run_id": batch.run_id, "phase": batch.phase, "joint": joint,
+                    "substep": batch.substep, "control_step": batch.control_step,
+                    "time_s": batch.time_s, "dt_s": batch.dt_s,
+                    "q_pre_rad": float(arrays["q_pre_rad"][column]),
+                    "qd_pre_rad_s": float(arrays["qd_pre_rad_s"][column]),
+                    "tau_raw_nm": float(arrays["tau_raw_nm"][column]),
+                    "tau_applied_nm": tau_applied,
+                    "curve_limit_nm": curve_limit,
                     "continuous_limit_nm": CURVE.continuous_torque,
-                    "effective_limit_nm": sample.effective_limit_nm,
-                    "thermal_theta_pre": sample.thermal_theta_pre,
-                    "thermal_theta_post": sample.thermal_theta_post,
+                    "effective_limit_nm": effective_limit,
+                    "thermal_theta_pre": thermal_pre,
+                    "thermal_theta_post": thermal_post,
                     "curve_margin_nm": curve_margin,
                     "effective_margin_nm": effective_margin,
                     "above_continuous": above,
-                    "derating_active": sample.thermal_theta_pre >= 1.0,
+                    "derating_active": thermal_pre >= 1.0,
                     "curve_violation": curve_margin < -1e-4 or effective_margin < -1e-4,
                     "above_continuous_window_id": int(above_window[index]),
                     "above_continuous_elapsed_s": float(above_elapsed[index]),
-                    "thermal_recompute_error": abs(thermal_recomputed - sample.thermal_theta_post),
+                    "thermal_recompute_error": abs(thermal_recomputed - thermal_post),
                 })
 
-            mujoco.mj_step(model, data)
             pitcher_pos = data.xpos[pitcher_body].copy()
             pitcher_rot = data.xmat[pitcher_body].reshape(3, 3).copy()
             base_pos = data.xpos[base_body].copy()
@@ -542,7 +598,14 @@ def main() -> int:
         "water_model": "rigid represented-water mass; no fluid simulation",
         "commit_sha": commit_sha,
         "backend": "native:cpu", "seed": seed,
-        "task_geometry": "jumper.five_foot", "scene": "coffee_bar",
+        "task_geometry": "jumper.barista", "scene": "coffee_bar",
+        "runtime": {
+            "task_id": "jumper.barista",
+            "actuator_class": type(servo).__name__,
+            "actuator_base_class": ServoCurveActuator.__name__,
+            "common_compute_called_by_subclass": True,
+            "app_consumer_env_loader": "tasks.load_env_cfg(task_id, play=True)",
+        },
         "trajectory_source": str(TRAJECTORY),
         "trajectory_sha256": config_sha256,
         "trajectory_method": config["source"],

@@ -80,7 +80,7 @@ register(
 )
 register(
     id="coffee_bar",
-    description="dimensioned counter with a V60, server and graspable 0.420 kg pitcher",
+    description="dimensioned counter with a V60, server and graspable 0.444 kg pitcher",
     tags=("presentation", "barista", "prop"),
     use="watching",
 )
