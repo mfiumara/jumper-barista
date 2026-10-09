@@ -69,3 +69,6 @@ MUJOCO_LOG.TXT
 # in .env.local, which takes precedence and is not committed.
 .env.local
 .claude/launch.json
+
+# Hermes managed worktrees
+.worktrees/
