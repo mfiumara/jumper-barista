@@ -157,18 +157,38 @@ keyframes, IK, collision geometry, timing, grasp pose, or gains. Admit a residua
 of the following are true:
 
 1. the deterministic reference passes the nominal seed and torque audit;
-2. a fixed perturbation matrix shows repeated failure from small, hardware-plausible initial
-   pose, handle pose, payload, and friction variations;
+2. the deterministic reference passes no more than 43 of the 48 perturbation runs below
+   (at most 89.6%), with at least two failures among the three repetitions of one matrix row;
 3. the failure is balance/tracking error rather than geometry, contact planning, stream
    visualization, or set-down sequencing; and
-4. the exact matrix, seeds, and before/after metrics are retained.
+4. the exact matrix, seeds, manifest hash, and before/after metrics are retained.
+
+The admission matrix has 16 one-at-a-time rows. Starting from the declared nominal scene, use
+the two stated levels for each of eight perturbations: pitcher initial X and Y by ±0.005 m,
+pitcher initial yaw by ±2 degrees, handle frame X/Y/Z relative to the pitcher body by ±0.003 m,
+combined pitcher-and-water mass at 0.400 and 0.450 kg (absolute values, not offsets), and all
+pitcher/handle contact friction coefficients multiplied by 0.90 and 1.10. Each row is
+run once with each seed `31001`, `31002`, and `31003`, for 48 runs. Before the first reference
+run, serialize all 48 fully expanded parameter vectors, the nominal vector, units, seed,
+task/scene IDs, and pass criteria to a versioned JSON manifest and record its SHA-256. Do not
+regenerate or edit that manifest between reference and residual evaluation; a necessary matrix
+change starts a new before/after evaluation. No other randomized parameter is allowed.
+
+Only failures of the M3/M4 base-stability or joint-reference-tracking checks count toward the
+admission failure threshold. A collision, bad grasp/contact geometry, bad stream or emitter,
+set-down sequence failure, or any torque-audit failure rejects the experiment for deterministic
+repair instead. The nominal replay and every nominal torque check must already pass before the
+48-run matrix is evaluated.
 
 Bound the first residual experiment to one wall-clock shift (8 hours), `native:cpu`, at most
 64 environments and 8 CPU threads, with an actor no larger than two 128-unit hidden layers.
 Bound residual targets to at most 0.05 rad on the carried arm and 0.03 rad on support joints,
 with the finger still owned by the squeeze hook. Stop if the residual does not improve the
-predeclared perturbation pass rate without worsening nominal torque, collision, or landing
-metrics. Increasing those limits, runtime, or compute is a separate decision; paid GPU use is
+predeclared perturbation pass rate. A residual succeeds only if all nominal checks still pass,
+every nominal and perturbation torque audit passes, and at least 46 of the same 48 runs pass
+(at least 95.8%), with no matrix row failing two or more repetitions and no regression in
+collision or landing metrics. Otherwise retain the deterministic reference and do not ship the
+residual. Increasing those limits, runtime, or compute is a separate decision; paid GPU use is
 a human gate.
 
 ## Measurement and exit checks
@@ -199,7 +219,9 @@ A run passes M3 only when all checks hold in the same replay:
 - the pitcher rises at least 0.050 m above its settled pre-grasp height and remains at or
   above that height continuously for at least 3.0 s;
 - during that hold, the grasp does not slip more than 0.010 m relative to the claw and the
-  pitcher does not contact the counter, brewer, cup, or free legs;
+  grasp-relative rotation is at most 5 degrees, and the pitcher body's declared upright axis
+  stays within 5 degrees of its settled pre-grasp orientation; the pitcher does not contact
+  the counter, brewer, cup, or free legs;
 - base roll and pitch each remain within 5 degrees of the settled start, base XY drift is at
   most 0.010 m, and every designated support foot remains in contact;
 - no joint-limit or self-collision event occurs; and
@@ -217,8 +239,9 @@ M4 includes every M3 constraint through the carried portion and additionally req
   the coffee-bed plane;
 - unwrapped polar angle of valid stream-plane intersections advances by at least 6 pi radians
   (3 turns); the target is 3-4 turns, not more than 4;
-- spiral radius starts within 0.010 m of bed centre, grows outward overall, and every valid
-  landing remains inside the configured paper-edge radius with at least 0.005 m margin;
+- spiral radius starts within 0.010 m of bed centre, passes the radial-progression test below,
+  and every valid landing remains inside the configured paper-edge radius with at least
+  0.005 m margin;
 - at least 95% of emitted particle/visual-stream samples intersect the bed acceptance disk;
   missed/no-intersection samples count as failures, not as absent data;
 - no pitcher, claw, leg, or particle emitter geom contacts the brewer or cup;
@@ -232,6 +255,26 @@ M4 includes every M3 constraint through the carried portion and additionally req
 The stream metric is explicitly a particle/visual approximation. Save its samples as data;
 do not infer landing quality from a beauty render.
 
+Evaluate turns and radial progression on one qualifying contiguous-valid segment. Declare the
+stream sample period `stream_dt_s` in the run record. In timestamp order, a sample belongs to
+the current segment only when it has a bed-plane intersection and its gap from the previous
+sample is at most `1.5 * stream_dt_s`; a missed/no-intersection sample or a larger gap ends the
+segment. Start a fresh angle at zero after a break--never carry an angle offset across it. For
+each adjacent pair in a segment, multiply the raw polar-angle difference by `+1` for the
+predeclared counter-clockwise direction or `-1` for clockwise, then wrap it to the principal
+interval `(-pi, pi]`. Reject the segment as undersampled if the absolute wrapped difference
+exceeds `pi / 2`; otherwise cumulatively sum these signed differences, retaining any negative
+backtracking. One segment, without bridging any rejected or missing sample, must advance at least
+`6 * pi` and at most `8 * pi` radians. The separate 95% landing requirement still uses every
+emitted sample, so segmentation cannot hide misses.
+
+On that same qualifying segment, let `r` be each intersection's bed-centre radius and let
+`theta` be its unwrapped directed angle. The radial-progression test passes only when the first
+`r` is at most 0.010 m, an ordinary least-squares fit `r = a + b * theta` has
+`b * (theta_last - theta_first) >= 0.015 m`, the fit RMSE is at most 0.005 m, and no sample is
+more than 0.010 m inward of the maximum radius previously reached in the segment. These rules
+permit bounded tracking noise and local backtracking while requiring measurable outward travel.
+
 ### Torque log schema and windowing
 
 Add a barista-owned substep logger; do not modify `JointMonitor` for M3/M4-specific fields.
@@ -242,10 +285,10 @@ Write one CSV row per physics substep and actuator with these columns:
 | `run_id`, `phase`, `joint` | string |
 | `substep`, `control_step` | integer |
 | `time_s`, `dt_s` | s |
-| `q_rad`, `qd_rad_s` | rad, rad/s |
+| `q_pre_rad`, `qd_pre_rad_s` | rad, rad/s |
 | `tau_raw_nm`, `tau_applied_nm` | N m |
 | `curve_limit_nm`, `continuous_limit_nm`, `effective_limit_nm` | N m |
-| `thermal_theta` | normalized; 1 is the derating trip |
+| `thermal_theta_pre`, `thermal_theta_post` | normalized; 1 is the derating trip |
 | `curve_margin_nm`, `effective_margin_nm` | limit minus absolute applied torque, N m |
 | `above_continuous`, `derating_active`, `curve_violation` | boolean |
 | `above_continuous_window_id`, `above_continuous_elapsed_s` | integer, s |
@@ -255,18 +298,43 @@ absolute torque; minimum curve/effective margin; maximum thermal state; count an
 above 1.2 N m; maximum contiguous time above 1.2 N m; derated-substep count; and first
 violation time.
 
-Sample at the physics substep because `ServoCurveActuator.compute` clamps and integrates heat
-there. Compute the curve limit from the logged speed with the exact YAML parameters. Recompute
-thermal state from applied torque using the actuator recurrence and compare it with the logged
-state; use an absolute numerical tolerance of 1e-4 N m for torque margins and 1e-5 for thermal
-state. Pass only when, for every joint:
+Implement the sampling point as a task-local audited actuator subclass under
+`tasks/jumper/barista/`, configured in place of `ServoCurveActuator` only for this task. Its
+`compute(cmd)` must preserve the common actuator's operation while capturing one immutable row
+in this exact order: (1) copy `cmd.pos` and `cmd.vel` as `q_pre_rad` and `qd_pre_rad_s`; (2)
+compute the unclamped PD sum as `tau_raw_nm`; (3) copy `_thermal` as `thermal_theta_pre` and
+derive the pre-derate curve and effective limits; (4) clamp to `tau_applied_nm`; (5) call
+`_integrate_heat(tau_applied_nm)` exactly once; and (6) copy the resulting `_thermal` as
+`thermal_theta_post`. A task-owned in-memory buffer keeps these tensors until the
+`barista/verification/` writer drains it after `sim.step`; the drain time does not change the
+recorded pre-step values. `time_s` is the simulation time at `compute` entry, before that
+substep's integration; `substep` identifies that integration and every actuator row for it has
+the same `time_s` and `dt_s`. Do not obtain q/qd from the generic
+`metrics_manager.compute_substep()` hook: it runs after `sim.step` and would pair post-step
+velocity with pre-step torque.
+
+The task replay and `scripts/play.py --app` replay both construct the `jumper.barista` simulation
+task, so they use this same configured task-local actuator while their command source differs.
+Enable and drain the same audit buffer for both commands. This keeps the instrumentation inside
+`tasks/jumper/barista/` and `barista/verification/`; it requires no edit to the shared actuator,
+vendored manager, app controller, or generic metrics API. If a future replay path cannot build
+that task actuator, treat generic actuator instrumentation as a separate dependency/card rather
+than silently falling back to post-step metrics.
+
+Compute the curve limit from `qd_pre_rad_s` with the exact YAML parameters. Derive
+the force cap as `min(force_limit, continuous_limit_nm)` when `thermal_theta_pre >= 1.0` and as
+`force_limit` otherwise, then set `effective_limit_nm` to the smaller of that cap and
+`curve_limit_nm`. Recompute `thermal_theta_post` from `thermal_theta_pre` and applied torque
+using the actuator recurrence, and compare it with the logged post state; use an absolute
+numerical tolerance of 1e-4 N m for torque margins and 1e-5 for thermal state. Pass only when,
+for every joint:
 
 1. no applied sample exceeds the speed-dependent curve or effective derated limit by more
    than 1e-4 N m;
 2. no contiguous interval above 1.2 N m exceeds 0.300 s;
-3. `thermal_theta` remains below 1.0, so the motion did not consume the modelled peak budget
-   to the derating point; and
-4. the recomputed and actuator thermal states agree within 1e-5.
+3. both `thermal_theta_pre` and `thermal_theta_post` remain below 1.0, so the motion did not
+   consume the modelled peak budget to the derating point; and
+4. the recomputed post-integration and actuator `thermal_theta_post` states agree within 1e-5.
 
 Keep phase boundaries out of the window reset: an over-continuous interval that starts during
 lift and continues into hold is one interval. Report both whole-run and per-phase summaries.
