@@ -79,6 +79,12 @@ register(
     use="watching",
 )
 register(
+    id="coffee_bar",
+    description="dimensioned counter with a V60, server and graspable 0.420 kg pitcher",
+    tags=("presentation", "barista", "prop"),
+    use="watching",
+)
+register(
     id="swing",
     description="**adds a swing**: an A-frame and a plank seat the robot can stand on",
     tags=("prop", "outdoor"),

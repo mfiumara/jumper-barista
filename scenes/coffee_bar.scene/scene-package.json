@@ -1,0 +1,93 @@
+{
+  "schema": "kk-scene-package/1",
+  "id": "jumper_coffee_bar",
+  "description": "A dimensioned coffee counter with a V60, server, and graspable gooseneck pitcher.",
+  "tags": [
+    "barista",
+    "coffee",
+    "presentation"
+  ],
+  "use": "watching",
+  "requiredCapabilities": [
+    "rigid"
+  ],
+  "world": {
+    "file": "scene.xml",
+    "assetDir": ".",
+    "terrainType": "none",
+    "counts": {
+      "geoms": 18,
+      "bodies": 3,
+      "lights": 2
+    },
+    "decorativeGeoms": [
+      "water_surface",
+      "spout_lower",
+      "spout_riser",
+      "spout_tip",
+      "handle_upper",
+      "handle_outer",
+      "handle_lower"
+    ],
+    "collidingGeoms": [
+      "counter_surface",
+      "counter_back",
+      "server_body",
+      "server_handle",
+      "v60_1",
+      "v60_2",
+      "v60_3",
+      "v60_4",
+      "v60_5",
+      "pitcher_body"
+    ],
+    "ground": {
+      "geom": "counter_surface"
+    },
+    "attach": {
+      "prefix": "bar_"
+    }
+  },
+  "props": [
+    {
+      "name": "pitcher",
+      "body": "pitcher",
+      "freeJoint": true,
+      "position": [
+        0.3,
+        -0.18,
+        0.001
+      ],
+      "geoms": [
+        "pitcher_body",
+        "nominal_water_mass",
+        "water_surface",
+        "spout_lower",
+        "spout_riser",
+        "spout_tip",
+        "handle_upper",
+        "handle_outer",
+        "handle_lower"
+      ]
+    }
+  ],
+  "spawn": {
+    "position": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "yaw": 0.0,
+    "site": "jumper_standing_slot"
+  },
+  "rules": {
+    "simulationOnly": true,
+    "waterModel": "rigid mass proxy; visual stream to be added by later work"
+  },
+  "files": {
+    "scene.xml": {
+      "bytes": 5773,
+      "sha256": "18152b5a456d874c78fc891dd039ce9d542e0364afdf4a26c6953031146449e6"
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "schema": "jumper-barista-dimensions/1",
+  "units": {
+    "length": "m",
+    "mass": "kg",
+    "volume": "mL"
+  },
+  "coordinate_frame": {
+    "origin": "centre of the Jumper standing slot on the counter surface",
+    "counter_surface_z_m": 0.0,
+    "forward_axis": "+X"
+  },
+  "objects": {
+    "counter": {
+      "dimensions_m": [1.2, 0.8, 0.04],
+      "design_mass_kg": 18.0,
+      "simulation_behavior": "static",
+      "top_surface_z_m": 0.0
+    },
+    "server": {
+      "outer_diameter_m": 0.09,
+      "height_m": 0.08,
+      "design_mass_kg": 0.25,
+      "simulation_behavior": "static",
+      "position_m": [0.32, 0.14, 0.0]
+    },
+    "v60": {
+      "maximum_diameter_m": 0.1,
+      "height_m": 0.09,
+      "design_mass_kg": 0.12,
+      "simulation_behavior": "static",
+      "position_m": [0.32, 0.14, 0.08],
+      "coffee_bed_target_radius_m": 0.038
+    },
+    "pitcher": {
+      "body_outer_diameter_m": 0.056,
+      "body_height_m": 0.08,
+      "spout_reach_from_axis_m": 0.129,
+      "dry_mass_kg": 0.24,
+      "simulation_behavior": "free rigid body",
+      "initial_position_m": [0.3, -0.18, 0.001]
+    },
+    "nominal_water": {
+      "volume_mL": 180,
+      "assumed_density_kg_per_m3": 1000,
+      "mass_kg": 0.18,
+      "simulation_behavior": "rigid mass proxy fixed inside pitcher; no fluid simulation"
+    }
+  },
+  "payload_check": {
+    "pitcher_dry_mass_kg": 0.24,
+    "nominal_water_mass_kg": 0.18,
+    "pitcher_plus_water_mass_kg": 0.42,
+    "design_limit_kg": 0.45,
+    "margin_kg": 0.03,
+    "passes": true
+  },
+  "standing_slot": {
+    "position_m": [0.0, 0.0, 0.0],
+    "yaw_deg": 0.0,
+    "clear_diameter_m": 0.5,
+    "nearest_prop_centre_distance_m": 0.349285,
+    "nearest_prop_surface_distance_m": 0.299285,
+    "clear_boundary_margin_m": 0.049285
+  }
+}
