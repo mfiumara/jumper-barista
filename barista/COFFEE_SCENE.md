@@ -67,12 +67,25 @@ does not have those Design inputs and must not be renamed or presented as a veri
 It therefore remains a hash-checked, replay-only MJCF package. A future `.map` export belongs in
 the independent Design repository and must record the exact Design and default-skin inputs used.
 
-## Open risks after `pour_out` (for t_27a0d8ff / t_41ccaaa7)
+## Spiral envelope and set-down path
 
-The M4 reachability fast check (`run_m4.py --fast-check --reachability-check`) stops at the end of
-`pour_out`; its contact, clearance, support and base-drift gates cover `transit`, `pour_in`,
-`spiral` and `pour_out` only, never the whole run. In the full replay at 74c66cf (reviewed in
-t_5d3954d9), after `pour_out` the non-colliding spout reached -6.75 mm clearance into `v60_rib_10`
-(negative from `lower` through `final_settle`, deepest in `clear_retreat`), support contacts fell to
-1-2, and base drift reached 21.8 mm. Set-down and the post-pour retreat still use the old layout;
-these remain OPEN and are not accepted by the fast check.
+The M4 keyframes are corrected against the measured actual spout, not a prescribed path. In this
+standing layout the tilted pitcher's rear meets the robot's upper shell/display, and the arm nears
+full extension, when the spout moves toward the far (+y, about 70°) side of the bed. A centred
+spiral there is limited to roughly 16 mm at a 24 mm spout height. The pour is therefore a centred,
+counter-clockwise, 3.5-turn spiral from 3.5 mm to 24 mm. Its radius is compressed by up to 36%
+toward 70°, the spout is held 24-27 mm above the bed at a 50° pour tilt, and the spiral ends
+laterally at 320°. `pour_in` passes over the V60 rim through a via point. `pour_out` backs
+radially away and rights the pitcher to about 5°.
+
+After pouring, the pitcher returns to its pickup spot (`set_down_target_m`). The arm goes back to
+the grasp pose while the five-support body lowers (44.5-47.5 s), so the contact-triggered release
+happens in `lower`/`set_down`. The claw stays open while it backs off and rises; it closes only
+after it is clear. `barista/verification/m4_spout_metrics.py` recomputes the spiral, rotation,
+per-phase contact/body/clearance and per-joint torque tables from a replay's raw logs.
+
+Open (for t_41ccaaa7): as the open claw backs off the grip in `clear_retreat`, it still rocks the
+released pitcher by up to about 9° and moves it about 10 mm before the pitcher settles upright.
+The retreat gate (15 mm) passes, but the release is not yet clean. The fast check
+(`run_m4.py --fast-check`) stops at the end of `pour_out`. Set-down, release and retreat evidence
+needs the full verifier.
