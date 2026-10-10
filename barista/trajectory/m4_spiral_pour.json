@@ -681,7 +681,7 @@
     "end_radius_m": 0.03,
     "bed_centre_m": [
       0.0934,
-      0.1811,
+      0.32,
       0.155
     ],
     "bed_acceptance_radius_m": 0.038,

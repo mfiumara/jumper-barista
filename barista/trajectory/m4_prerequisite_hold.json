@@ -19,8 +19,8 @@
     "yaw_rad": 0.0
   },
   "arm_joint_order": ["LF_J0_joint", "LF_J1_joint", "LF_J2_joint", "LF_J3_joint"],
-  "support_pour_rad": {},
-  "support_base_rad": {},
+  "support_pour_rad": {"RF_J4_joint": 0.80},
+  "support_base_rad": {"RF_J4_joint": 0.80},
   "support_pour_profile_s": {
     "scale": 0.0,
     "raise_start": 17.5,
@@ -46,7 +46,7 @@
     "turns": 0.0,
     "start_radius_m": 0.0,
     "end_radius_m": 0.0,
-    "bed_centre_m": [0.0934, 0.1811, 0.155],
+    "bed_centre_m": [0.0934, 0.32, 0.155],
     "bed_acceptance_radius_m": 0.038,
     "required_edge_margin_m": 0.005,
     "required_success_rate": 0.95,

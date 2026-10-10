@@ -22,7 +22,7 @@
       "height_m": 0.08,
       "design_mass_kg": 0.25,
       "simulation_behavior": "static",
-      "position_m": [0.0934, 0.1811, 0.0]
+      "position_m": [0.0934, 0.32, 0.0]
     },
     "v60": {
       "maximum_diameter_m": 0.076,
@@ -36,7 +36,7 @@
       "collision_representation": "open radial ribs with a segmented rim and a lower support plate",
       "design_mass_kg": 0.12,
       "simulation_behavior": "static",
-      "position_m": [0.0934, 0.1811, 0.073],
+      "position_m": [0.0934, 0.32, 0.073],
       "coffee_bed_target_radius_m": 0.038
     },
     "pitcher": {
@@ -92,9 +92,9 @@
     "position_m": [0.0, 0.0, 0.0],
     "yaw_deg": 0.0,
     "clear_diameter_m": 0.5,
-    "nearest_fixed_prop_centre_distance_m": 0.412311,
-    "nearest_fixed_prop_surface_distance_m": 0.362311,
-    "fixed_prop_clear_boundary_margin_m": 0.112311,
+    "nearest_fixed_prop_centre_distance_m": 0.333352,
+    "nearest_fixed_prop_surface_distance_m": 0.288352,
+    "fixed_prop_clear_boundary_margin_m": 0.038352,
     "free_pitcher_is_inside_marked_boundary": true
   }
 }

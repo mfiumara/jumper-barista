@@ -52,6 +52,24 @@ def _rotation_angle_deg(first: np.ndarray, second: np.ndarray) -> float:
     return math.degrees(math.acos(cosine))
 
 
+def _event_diagnostics(motion: list[dict[str, str]], column: str) -> dict:
+    rows = [row for row in motion if row[column] == "True"]
+    phases = {}
+    for phase in dict.fromkeys(row["phase"] for row in rows):
+        phase_rows = [row for row in rows if row["phase"] == phase]
+        phases[phase] = {
+            "sample_count": len(phase_rows),
+            "first_time_s": float(phase_rows[0]["time_s"]),
+            "last_time_s": float(phase_rows[-1]["time_s"]),
+        }
+    return {
+        "sample_count": len(rows),
+        "first_time_s": float(rows[0]["time_s"]) if rows else None,
+        "last_time_s": float(rows[-1]["time_s"]) if rows else None,
+        "phases": phases,
+    }
+
+
 def _hold(out: Path) -> int:
     raw = out / "raw_hold"
     raw.mkdir(parents=True, exist_ok=True)
@@ -108,14 +126,18 @@ def _hold(out: Path) -> int:
     no_drop_duration_s = _longest_true(no_drop, dt_s)
     translation_m = float(np.linalg.norm(last_position - first_position))
     rotation_deg = _rotation_angle_deg(first_rotation, last_rotation)
-    forbidden = any(
-        row["brewer_contact"] == "True"
-        or row["robot_brewer_contact"] == "True"
-        or row["non_claw_robot_contact"] == "True"
-        or row["self_contact"] == "True"
-        for row in hold
-    )
-    joint_limit = any(row["joint_limit_violation"] == "True" for row in motion)
+    event_columns = {
+        "robot_brewer": "robot_brewer_contact",
+        "pitcher_brewer": "brewer_contact",
+        "pitcher_non_claw_robot": "non_claw_robot_contact",
+        "robot_self": "self_contact",
+        "joint_limit": "joint_limit_violation",
+    }
+    forbidden_events = {
+        name: _event_diagnostics(motion, column)
+        for name, column in event_columns.items()
+    }
+    forbidden = any(event["sample_count"] for event in forbidden_events.values())
     whole_joint = {
         value["joint"]: value
         for value in raw_summary["torque"]["per_joint_and_phase"].values()
@@ -130,7 +152,13 @@ def _hold(out: Path) -> int:
         "no_drop_for_25_s": no_drop_duration_s >= HOLD_REQUIRED_S,
         "bounded_hold_translation": translation_m <= TRANSLATION_LIMIT_M,
         "bounded_hold_rotation": rotation_deg <= ROTATION_LIMIT_DEG,
-        "no_forbidden_or_self_contact": not forbidden,
+        "no_robot_brewer_contact_whole_run": not forbidden_events["robot_brewer"]["sample_count"],
+        "no_pitcher_brewer_contact_whole_run": not forbidden_events["pitcher_brewer"]["sample_count"],
+        "no_pitcher_non_claw_robot_contact_whole_run": not forbidden_events[
+            "pitcher_non_claw_robot"
+        ]["sample_count"],
+        "no_robot_self_contact_whole_run": not forbidden_events["robot_self"]["sample_count"],
+        "no_forbidden_or_self_contact_whole_run": not forbidden,
         "support_stable": min(int(row["support_foot_contacts"]) for row in hold) >= 5,
         "body_drift_bounded": max(float(row["base_xy_drift_m"]) for row in hold)
         <= BASE_DRIFT_LIMIT_M,
@@ -138,7 +166,7 @@ def _hold(out: Path) -> int:
             max(abs(float(row["base_roll_deg"])), abs(float(row["base_pitch_deg"])))
             for row in hold
         ) <= BASE_TIP_LIMIT_DEG,
-        "joint_limits": not joint_limit,
+        "joint_limits_whole_run": not forbidden_events["joint_limit"]["sample_count"],
         "payload": raw_summary["payload"]["passes"],
         "servo_curve_peak_dwell_and_thermal": raw_summary["torque"]["passes"],
     }
@@ -166,7 +194,8 @@ def _hold(out: Path) -> int:
             float(row["brewer_clearance_m"]) for row in hold
         ),
         "forbidden_contact": forbidden,
-        "joint_limit_violation": joint_limit,
+        "forbidden_contact_events_whole_run": forbidden_events,
+        "joint_limit_violation": bool(forbidden_events["joint_limit"]["sample_count"]),
         "drop_state": not all(no_drop),
         "payload": raw_summary["payload"],
         "torque_joint_count": len(whole_joint),

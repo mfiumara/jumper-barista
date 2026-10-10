@@ -299,6 +299,8 @@ def main() -> int:
     if set(runtime_joint_col) != set(HOME):
         raise RuntimeError("barista runtime joint set differs from the 22-joint hardware order")
     initial = np.asarray([HOME[name] for name in robot.joint_names], dtype=np.float64)
+    for name, value in config["support_base_rad"].items():
+        initial[runtime_joint_col[name]] = float(value)
     arm_names = config["arm_joint_order"]
     for name, value in zip(arm_names, config["keyframes"][0]["arm_rad"], strict=True):
         initial[runtime_joint_col[name]] = value
