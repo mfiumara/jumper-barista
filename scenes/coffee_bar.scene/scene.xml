@@ -24,6 +24,7 @@
     <default class="fixed_prop">
       <geom contype="1" conaffinity="1"/>
     </default>
+
     <default class="pitcher_visual">
       <geom material="steel" density="0" contype="0" conaffinity="0" group="2"/>
     </default>
@@ -47,8 +48,8 @@
     <site name="jumper_forward" pos="0.20 0 0.002" type="sphere"
           size="0.008" rgba="0.25 0.65 0.42 0.7" group="4"/>
 
-    <!-- Static 90 mm diameter, 80 mm tall server centred at (0.38, 0.16). -->
-    <body name="server" pos="0.38 0.16 0">
+    <!-- Static 90 mm diameter, 80 mm tall server centred within the arm workspace. -->
+    <body name="server" pos="0.1283 0.1674 0">
       <geom name="server_body" class="fixed_prop" type="cylinder" pos="0 0 0.04"
             size="0.045 0.04" mass="0.250" material="glass"/>
       <geom name="server_handle" class="fixed_prop" type="capsule"
@@ -57,18 +58,18 @@
       <site name="server_centre" pos="0 0 0.08" size="0.004" rgba="1 0.8 0.2 1" group="4"/>
     </body>
 
-    <!-- Static stepped V60 proxy: 100 mm maximum diameter and 90 mm high. -->
-    <body name="v60" pos="0.38 0.16 0.08">
+    <!-- Static stepped V60 proxy: 76 mm maximum diameter and 90 mm high. -->
+    <body name="v60" pos="0.1283 0.1674 0.073">
       <geom name="v60_1" class="fixed_prop" type="cylinder" pos="0 0 0.009"
-            size="0.022 0.009" mass="0.024" material="ceramic_white"/>
+            size="0.018 0.009" mass="0.024" material="ceramic_white"/>
       <geom name="v60_2" class="fixed_prop" type="cylinder" pos="0 0 0.027"
-            size="0.029 0.009" mass="0.024" material="ceramic_white"/>
+            size="0.023 0.009" mass="0.024" material="ceramic_white"/>
       <geom name="v60_3" class="fixed_prop" type="cylinder" pos="0 0 0.045"
-            size="0.036 0.009" mass="0.024" material="ceramic_white"/>
+            size="0.028 0.009" mass="0.024" material="ceramic_white"/>
       <geom name="v60_4" class="fixed_prop" type="cylinder" pos="0 0 0.063"
-            size="0.043 0.009" mass="0.024" material="ceramic_white"/>
+            size="0.033 0.009" mass="0.024" material="ceramic_white"/>
       <geom name="v60_5" class="fixed_prop" type="cylinder" pos="0 0 0.081"
-            size="0.050 0.009" mass="0.024" material="ceramic_white"/>
+            size="0.038 0.009" mass="0.024" material="ceramic_white"/>
       <site name="coffee_bed_target" pos="0 0 0.084" type="cylinder"
             size="0.038 0.001" rgba="0.20 0.08 0.025 1" group="4"/>
     </body>
@@ -109,21 +110,21 @@
       -->
       <geom name="top_grip_bar" type="capsule"
             fromto="-0.017915 -0.008657 0.112969 0.017915 0.008657 0.117031" size="0.012"
-            mass="0.015" rgba="0.12 0.12 0.11 1" friction="1.2 0.005 0.0001"/>
+            mass="0.015" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"/>
       <geom name="top_grip_collar_a" type="cylinder"
             fromto="-0.018811 -0.009090 0.112867 -0.017019 -0.008224 0.113071"
             size="0.014" mass="0.001" rgba="0.12 0.12 0.11 1"
-            friction="1.2 0.005 0.0001"/>
+            friction="2.0 0.05 0.01"/>
       <geom name="top_grip_collar_b" type="cylinder"
             fromto="0.017019 0.008224 0.116929 0.018811 0.009090 0.117133"
             size="0.014" mass="0.001" rgba="0.12 0.12 0.11 1"
-            friction="1.2 0.005 0.0001"/>
+            friction="2.0 0.05 0.01"/>
       <geom name="top_grip_strut_a" type="capsule"
             fromto="-0.017915 -0.008657 0.078 -0.017915 -0.008657 0.112969" size="0.004"
-            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="1.2 0.005 0.0001"/>
+            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"/>
       <geom name="top_grip_strut_b" type="capsule"
             fromto="0.017915 0.008657 0.078 0.017915 0.008657 0.117031" size="0.004"
-            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="1.2 0.005 0.0001"/>
+            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"/>
       <site name="pitcher_grip" pos="0 0 0.115" size="0.006"
             rgba="0.95 0.45 0.15 1" group="4"/>
       <site name="pitcher_spout_tip" pos="0 0.129 0.110" size="0.004"

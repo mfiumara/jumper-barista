@@ -22,12 +22,21 @@ TRAJECTORY = REPO / "barista" / "trajectory" / "m4_spiral_pour.json"
 DIMENSIONS = REPO / "barista" / "coffee_scene_dimensions.json"
 WIDTH, HEIGHT = 960, 540
 CONTROL_DECIMATION = 4
+FAST_CHECK_END_PHASE = "pour_out"
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--no-render", action="store_true")
+    parser.add_argument(
+        "--fast-check",
+        action="store_true",
+        help=(
+            "run a non-rendered diagnostic bounded at the end of pour_out; "
+            "this is not release evidence and does not replace the default verifier"
+        ),
+    )
     return parser
 
 
@@ -332,13 +341,23 @@ def main() -> int:
         for suffix in support_suffixes
     }
 
+    nominal_dt_s = float(config["physics_dt_s"])
     dt_s = float(model.opt.timestep)
-    if abs(dt_s - float(config["physics_dt_s"])) > 1e-12:
+    if abs(dt_s - nominal_dt_s) > 1e-12:
         raise RuntimeError(f"compiled dt {dt_s} differs from trajectory dt")
-    control_dt_s = dt_s * CONTROL_DECIMATION
+    control_decimation = CONTROL_DECIMATION
+    control_dt_s = dt_s * control_decimation
     if abs(control_dt_s - float(config["control_dt_s"])) > 1e-12:
         raise RuntimeError(f"control dt {control_dt_s} differs from trajectory dt")
-    duration_s = float(config["keyframes"][-1]["end_s"])
+    full_duration_s = float(config["keyframes"][-1]["end_s"])
+    duration_s = (
+        next(
+            float(frame["end_s"])
+            for frame in config["keyframes"]
+            if frame["phase"] == FAST_CHECK_END_PHASE
+        )
+        if args.fast_check else full_duration_s
+    )
     steps = round(duration_s / dt_s)
     render_stride = round(1.0 / (float(config["render_fps"]) * dt_s))
     if render_stride * dt_s * float(config["render_fps"]) != 1.0:
@@ -365,16 +384,6 @@ def main() -> int:
     compiled_bed = data.site_xpos[bed_site].copy()
     if np.linalg.norm(compiled_bed - bed_centre) > 1e-9:
         raise RuntimeError(f"compiled bed centre {compiled_bed} differs from trajectory")
-    spiral_start_s = next(
-        float(frame["end_s"])
-        for frame in config["keyframes"]
-        if frame["phase"] == "pour_in"
-    )
-    spiral_end_s = next(
-        float(frame["end_s"])
-        for frame in config["keyframes"]
-        if frame["phase"] == "spiral"
-    )
     set_down_contact_seen = False
     set_down_contact_time_s = None
     set_down_arm = None
@@ -383,7 +392,7 @@ def main() -> int:
         for step in range(steps):
             time_s = step * dt_s
             phase, _, _ = _target(config, time_s)
-            if step % CONTROL_DECIMATION == 0:
+            if step % control_decimation == 0:
                 _, arm, finger_request = _target(config, time_s)
                 if set_down_contact_seen and phase in ("lower", "set_down", "release"):
                     assert set_down_arm is not None
@@ -441,7 +450,7 @@ def main() -> int:
             servo.set_audit_context(
                 phase=phase,
                 substep=step,
-                control_step=step // CONTROL_DECIMATION,
+                control_step=step // control_decimation,
                 time_s=time_s,
             )
             env.scene.write_data_to_sim()
@@ -513,6 +522,11 @@ def main() -> int:
             pitcher_pos = data.xpos[pitcher_body].copy()
             pitcher_rot = data.xmat[pitcher_body].reshape(3, 3).copy()
             spout_pos = data.site_xpos[spout_site].copy()
+            spout_velocity = np.zeros(6, dtype=np.float64)
+            mujoco.mj_objectVelocity(
+                model, data, mujoco.mjtObj.mjOBJ_SITE, spout_site, spout_velocity, 0
+            )
+            spout_linear_velocity = spout_velocity[3:].copy()
             pitcher_linear_speed = float(np.linalg.norm(data.qvel[pitcher_dof : pitcher_dof + 3]))
             pitcher_angular_speed = float(
                 np.linalg.norm(data.qvel[pitcher_dof + 3 : pitcher_dof + 6])
@@ -617,6 +631,9 @@ def main() -> int:
                 "pitcher_z_m": float(pitcher_pos[2]), "lift_m": lift,
                 "spout_x_m": float(spout_pos[0]), "spout_y_m": float(spout_pos[1]),
                 "spout_z_m": float(spout_pos[2]),
+                "spout_vx_m_s": float(spout_linear_velocity[0]),
+                "spout_vy_m_s": float(spout_linear_velocity[1]),
+                "spout_vz_m_s": float(spout_linear_velocity[2]),
                 "spout_height_above_bed_m": float(spout_pos[2] - bed_centre[2]),
                 "pitcher_xx": float(pitcher_rot[0, 0]), "pitcher_xy": float(pitcher_rot[0, 1]),
                 "pitcher_xz": float(pitcher_rot[0, 2]), "pitcher_yx": float(pitcher_rot[1, 0]),
@@ -649,29 +666,32 @@ def main() -> int:
                 "pitcher_contact_geoms": ";".join(sorted(set(contact_names))),
             })
             landing = None
-            if phase == "spiral" and step % CONTROL_DECIMATION == 0:
-                progress = float(np.clip(
-                    (time_s - spiral_start_s) / (spiral_end_s - spiral_start_s), 0.0, 1.0
-                ))
-                angle = 2.0 * math.pi * float(stream_cfg["turns"]) * progress
-                radius = (
-                    float(stream_cfg["start_radius_m"])
-                    + (float(stream_cfg["end_radius_m"]) - float(stream_cfg["start_radius_m"]))
-                    * progress
-                )
-                landing = bed_centre.copy()
-                landing[:2] += radius * np.asarray((math.cos(angle), math.sin(angle)))
+            if phase == "spiral" and step % control_decimation == 0:
+                # The massless visual stream inherits the measured outlet velocity and then
+                # follows a gravity-only ballistic path to the bed. Both its origin and landing
+                # are therefore driven by the actual spout, never a prescribed target spiral.
                 height = float(spout_pos[2] - bed_centre[2])
                 intersects = height > 0.0
                 flight_s = (
-                    math.sqrt(2.0 * height / float(stream_cfg["gravity_m_s2"]))
+                    (
+                        float(spout_linear_velocity[2])
+                        + math.sqrt(
+                            float(spout_linear_velocity[2]) ** 2
+                            + 2.0 * float(stream_cfg["gravity_m_s2"]) * height
+                        )
+                    ) / float(stream_cfg["gravity_m_s2"])
                     if intersects else math.nan
                 )
-                velocity_xy = (
-                    (landing[:2] - spout_pos[:2]) / flight_s
-                    if intersects else np.full(2, math.nan)
-                )
+                landing = bed_centre.copy()
+                landing[:2] = spout_pos[:2] + spout_linear_velocity[:2] * flight_s
+                velocity_xy = spout_linear_velocity[:2] if intersects else np.full(2, math.nan)
+                spout_radius = float(np.linalg.norm(spout_pos[:2] - bed_centre[:2]))
                 landing_radius = float(np.linalg.norm(landing[:2] - bed_centre[:2]))
+                horizontal_span = float(np.linalg.norm(landing[:2] - spout_pos[:2]))
+                horizontal_launch_speed = float(np.linalg.norm(velocity_xy))
+                angle = math.atan2(
+                    spout_pos[1] - bed_centre[1], spout_pos[0] - bed_centre[0]
+                )
                 accepted = (
                     intersects
                     and landing_radius <= float(stream_cfg["bed_acceptance_radius_m"])
@@ -683,14 +703,15 @@ def main() -> int:
                     "spout_x_m": float(spout_pos[0]), "spout_y_m": float(spout_pos[1]),
                     "spout_z_m": float(spout_pos[2]), "bed_z_m": float(bed_centre[2]),
                     "spout_height_m": height, "flight_time_s": flight_s,
+                    "spout_radius_m": spout_radius,
+                    "horizontal_span_m": horizontal_span,
                     "launch_vx_m_s": float(velocity_xy[0]),
-                    "launch_vy_m_s": float(velocity_xy[1]), "launch_vz_m_s": 0.0,
+                    "launch_vy_m_s": float(velocity_xy[1]),
+                    "launch_vz_m_s": float(spout_linear_velocity[2]),
+                    "horizontal_launch_speed_m_s": horizontal_launch_speed,
                     "landing_x_m": float(landing[0]), "landing_y_m": float(landing[1]),
                     "landing_z_m": float(landing[2]), "landing_radius_m": landing_radius,
-                    "unwrapped_angle_rad": angle,
-                    "angle_rad": math.atan2(
-                        landing[1] - bed_centre[1], landing[0] - bed_centre[0]
-                    ),
+                    "unwrapped_angle_rad": angle, "angle_rad": angle,
                     "accepted": accepted,
                     "miss_reason": "" if accepted else "outside acceptance disk",
                 })
@@ -747,8 +768,14 @@ def main() -> int:
     raw_angles = np.asarray([row["angle_rad"] for row in stream_rows])
     wrapped_delta = (np.diff(raw_angles) + math.pi) % (2.0 * math.pi) - math.pi
     unwrapped = np.r_[0.0, np.cumsum(wrapped_delta)]
-    radii = np.asarray([row["landing_radius_m"] for row in stream_rows])
-    slope, intercept = np.polyfit(unwrapped, radii, 1)
+    radii = np.asarray([row["spout_radius_m"] for row in stream_rows])
+    landing_radii = np.asarray([row["landing_radius_m"] for row in stream_rows])
+    if float(np.ptp(unwrapped)) <= 1e-12:
+        # A failed grasp can leave the actual spout stationary. That is a diagnostic
+        # gate failure, not a reason for the diagnostic verifier itself to crash.
+        slope, intercept = 0.0, float(np.mean(radii))
+    else:
+        slope, intercept = np.polyfit(unwrapped, radii, 1)
     fit = intercept + slope * unwrapped
     radial_rmse = float(np.sqrt(np.mean((radii - fit) ** 2)))
     radial_progress = float(slope * (unwrapped[-1] - unwrapped[0]))
@@ -763,22 +790,37 @@ def main() -> int:
     edge_margin = float(stream_cfg["bed_acceptance_radius_m"]) - float(np.max(radii))
     spout_min = min(row["spout_height_above_bed_m"] for row in pour_rows)
     spout_max = max(row["spout_height_above_bed_m"] for row in pour_rows)
+    pour_in_rows = [row for row in motion_rows if row["phase"] == "pour_in"]
+    pour_out_rows = [row for row in motion_rows if row["phase"] == "pour_out"]
+    maximum_pour_tilt = max(row["pitcher_tilt_deg"] for row in pour_rows)
+    final_pour_out_tilt = pour_out_rows[-1]["pitcher_tilt_deg"]
+    maximum_horizontal_span = max(row["horizontal_span_m"] for row in stream_rows)
+    maximum_horizontal_launch_speed = max(
+        row["horizontal_launch_speed_m_s"] for row in stream_rows
+    )
+    maximum_landing_radius = float(np.max(landing_radii))
 
     final_target = np.asarray(config["set_down_target_m"], dtype=np.float64)
     final_positions = np.asarray([
         [row["pitcher_x_m"], row["pitcher_y_m"], row["pitcher_z_m"]] for row in final_rows
     ])
-    final_position_error = float(np.max(np.linalg.norm(final_positions - final_target, axis=1)))
-    retreat_start = np.asarray([
-        retreat_rows[0]["pitcher_x_m"], retreat_rows[0]["pitcher_y_m"],
-        retreat_rows[0]["pitcher_z_m"],
-    ])
-    retreat_motion = max(
-        float(np.linalg.norm(np.asarray([
-            row["pitcher_x_m"], row["pitcher_y_m"], row["pitcher_z_m"],
-        ]) - retreat_start))
-        for row in retreat_rows
+    final_position_error = (
+        float(np.max(np.linalg.norm(final_positions - final_target, axis=1)))
+        if final_rows else math.nan
     )
+    if retreat_rows:
+        retreat_start = np.asarray([
+            retreat_rows[0]["pitcher_x_m"], retreat_rows[0]["pitcher_y_m"],
+            retreat_rows[0]["pitcher_z_m"],
+        ])
+        retreat_motion = max(
+            float(np.linalg.norm(np.asarray([
+                row["pitcher_x_m"], row["pitcher_y_m"], row["pitcher_z_m"],
+            ]) - retreat_start))
+            for row in retreat_rows
+        )
+    else:
+        retreat_motion = math.nan
 
     motion_passes = {
         "m3_lift_and_hold": (
@@ -795,10 +837,15 @@ def main() -> int:
             and spout_max <= float(threshold["spout_height_max_m"])
         ),
         "pour_duration": 15.0 <= len(pour_rows) * dt_s <= 25.0,
+        "visible_pour_in_rotation": (
+            max(row["pitcher_tilt_deg"] for row in pour_in_rows)
+            >= threshold["minimum_pour_tilt_deg"]
+        ),
+        "visible_pour_out_rotation": final_pour_out_tilt <= 15.0,
         "carried_grasp_translation": max(row["grasp_translation_m"] for row in carried_rows)
         <= threshold["grasp_translation_m"],
         "carried_grasp_rotation": max(row["grasp_rotation_deg"] for row in carried_rows)
-        <= threshold["grasp_rotation_deg"],
+        <= threshold["carried_grasp_rotation_deg"],
         "carried_base_drift": max(row["base_xy_drift_m"] for row in carried_rows)
         <= threshold["base_xy_drift_m"],
         "carried_base_roll_pitch": max(
@@ -813,12 +860,19 @@ def main() -> int:
             or row["robot_brewer_contact"] or row["non_claw_robot_contact"]
             for row in carried_rows
         ),
+        "no_brewer_contact": not any(
+            row["brewer_contact"] or row["robot_brewer_contact"] for row in motion_rows
+        ),
+        "carried_brewer_clearance": min(
+            row["brewer_clearance_m"] for row in carried_rows
+        ) >= threshold["minimum_brewer_clearance_m"],
         "no_joint_limit_or_self_contact": not any(
             row["joint_limit_violation"] or row["self_contact"] for row in motion_rows
         ),
         "support_before_release": set_down_contact_seen,
         "stable_final_set_down": (
-            len(final_rows) * dt_s >= float(threshold["final_settle_s"])
+            bool(final_rows)
+            and len(final_rows) * dt_s >= float(threshold["final_settle_s"])
             and final_position_error <= float(threshold["set_down_position_error_m"])
             and max(row["pitcher_linear_speed_m_s"] for row in final_rows)
             <= float(threshold["set_down_linear_speed_m_s"])
@@ -827,7 +881,7 @@ def main() -> int:
             and all(row["counter_contact"] for row in final_rows)
         ),
         "retreat_does_not_move_pitcher": retreat_motion
-        <= float(threshold["retreat_pitcher_motion_m"]),
+        <= float(threshold["retreat_pitcher_motion_m"]) if retreat_rows else False,
     }
     stream_passes = {
         "sample_period": all(
@@ -844,6 +898,13 @@ def main() -> int:
         "edge_margin": edge_margin >= threshold["paper_edge_margin_m"],
         "landing_success": landing_success_rate >= threshold["landing_success_rate"],
         "all_intersections_valid": all(row["intersection_valid"] for row in stream_rows),
+        "plausible_horizontal_span": (
+            maximum_horizontal_span <= threshold["maximum_horizontal_span_m"]
+        ),
+        "plausible_horizontal_launch_speed": (
+            maximum_horizontal_launch_speed
+            <= threshold["maximum_horizontal_launch_speed_m_s"]
+        ),
         "no_emission_after_pour_out": True,
     }
 
@@ -853,7 +914,8 @@ def main() -> int:
     video = out / "m4_spiral_pour.mp4"
     spiral_frame = out / "m4_outer_spiral.png"
     set_down_frame = out / "m4_set_down.png"
-    if not args.no_render:
+    render_enabled = not args.no_render and not args.fast_check
+    if render_enabled:
         _render(
             model, mujoco, qpos_array, render_stream_landings, spout_site,
             float(bed_centre[2]), camera, float(config["render_fps"]), video,
@@ -866,6 +928,16 @@ def main() -> int:
 
     summary = {
         "simulation_only": True,
+        "evidence_class": (
+            "diagnostic_non_release_fast_check" if args.fast_check else "full_m4_verification"
+        ),
+        "release_evidence": not args.fast_check,
+        "fast_check": args.fast_check,
+        "fast_check_notice": (
+            "NON-RELEASE DIAGNOSTIC: nominal 5 ms physics bounded at pour_out; "
+            "run the default verifier for M4 release evidence"
+            if args.fast_check else None
+        ),
         "water_model": (
             "particle/visual ballistic approximation only; represented water is a rigid mass "
             "proxy; no fluid simulation and no real-robot run"
@@ -881,10 +953,13 @@ def main() -> int:
         "trajectory_source": str(TRAJECTORY), "trajectory_sha256": config_sha256,
         "trajectory_method": config["source"], "input_shas": config["provenance"],
         "physics_dt_s": dt_s, "physics_sample_rate_hz": 1.0 / dt_s,
-        "control_decimation": CONTROL_DECIMATION,
+        "nominal_physics_dt_s": nominal_dt_s,
+        "control_decimation": control_decimation,
         "control_rate_hz": 1.0 / control_dt_s,
         "stream_dt_s": float(config["stream_dt_s"]),
         "render_fps": float(config["render_fps"]), "duration_s": duration_s,
+        "full_duration_s": full_duration_s,
+        "bounded_end_phase": FAST_CHECK_END_PHASE if args.fast_check else None,
         "friction_cone": PROP_CONE, "impratio": PROP_IMPRATIO,
         "payload": payload,
         "motion": {
@@ -893,6 +968,8 @@ def main() -> int:
             "valid_m3_hold_s": valid_hold_duration,
             "pour_duration_s": len(pour_rows) * dt_s,
             "spout_height_min_m": spout_min, "spout_height_max_m": spout_max,
+            "maximum_pour_tilt_deg": maximum_pour_tilt,
+            "final_pour_out_tilt_deg": final_pour_out_tilt,
             "maximum_carried_pitcher_tilt_deg": max(
                 row["pitcher_tilt_deg"] for row in carried_rows
             ),
@@ -921,10 +998,10 @@ def main() -> int:
             "maximum_final_position_error_m": final_position_error,
             "maximum_final_linear_speed_m_s": max(
                 row["pitcher_linear_speed_m_s"] for row in final_rows
-            ),
+            ) if final_rows else math.nan,
             "maximum_final_angular_speed_rad_s": max(
                 row["pitcher_angular_speed_rad_s"] for row in final_rows
-            ),
+            ) if final_rows else math.nan,
             "maximum_retreat_pitcher_motion_m": retreat_motion,
             "set_down_support_contact_time_s": set_down_contact_time_s,
             "fixed_jaw_contact_before_lift": fixed_before_lift,
@@ -935,7 +1012,8 @@ def main() -> int:
         "stream": {
             "schema_columns": list(stream_rows[0]), "sample_count": len(stream_rows),
             "direction": stream_cfg["direction"], "unwrapped_angle_rad": angle_advance,
-            "turn_count": turns, "first_radius_m": float(radii[0]),
+            "actual_spout_turn_count": turns, "turn_count": turns,
+            "first_radius_m": float(radii[0]),
             "last_radius_m": float(radii[-1]), "maximum_radius_m": float(np.max(radii)),
             "radial_fit_slope_m_per_rad": float(slope),
             "radial_fit_intercept_m": float(intercept),
@@ -943,6 +1021,9 @@ def main() -> int:
             "maximum_inward_excursion_m": inward_excursion,
             "paper_edge_radius_m": float(stream_cfg["bed_acceptance_radius_m"]),
             "minimum_edge_margin_m": edge_margin,
+            "maximum_landing_radius_m": maximum_landing_radius,
+            "maximum_horizontal_span_m": maximum_horizontal_span,
+            "maximum_horizontal_launch_speed_m_s": maximum_horizontal_launch_speed,
             "landing_success_count": len(stream_rows) - len(misses),
             "landing_miss_count": len(misses), "landing_success_rate": landing_success_rate,
             "misses": misses, "checks": stream_passes,
@@ -959,9 +1040,9 @@ def main() -> int:
         },
         "artifacts": {
             "torque_csv": str(torque_csv), "motion_csv": str(motion_csv),
-            "stream_csv": str(stream_csv), "video": str(video) if not args.no_render else None,
-            "spiral_frame": str(spiral_frame) if not args.no_render else None,
-            "set_down_frame": str(set_down_frame) if not args.no_render else None,
+            "stream_csv": str(stream_csv), "video": str(video) if render_enabled else None,
+            "spiral_frame": str(spiral_frame) if render_enabled else None,
+            "set_down_frame": str(set_down_frame) if render_enabled else None,
             "dimensions_px": [WIDTH, HEIGHT],
         },
     }
@@ -971,7 +1052,9 @@ def main() -> int:
     )
     summary_path = out / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, default=_json_default) + "\n", "utf-8")
-    print(f"[m4] turns={turns:.6f}; radial progress={radial_progress:.6f} m; "
+    if args.fast_check:
+        print("[m4] NON-RELEASE DIAGNOSTIC FAST CHECK (bounded at pour_out; no render)")
+    print(f"[m4] actual-spout turns={turns:.6f}; radial progress={radial_progress:.6f} m; "
           f"landing={landing_success_rate:.3%} ({len(misses)} misses)")
     print(f"[m4] spout height={spout_min:.6f}..{spout_max:.6f} m; "
           f"edge margin={edge_margin:.6f} m")
@@ -982,7 +1065,7 @@ def main() -> int:
     print(f"[m4] qpos sha256={state_sha256}")
     for path in (torque_csv, motion_csv, stream_csv, summary_path):
         print(f"[m4] artifact: {path}")
-    if not args.no_render:
+    if render_enabled:
         for path in (video, spiral_frame, set_down_frame):
             print(f"[m4] artifact: {path}")
     return 0 if summary["passes"] else 1

@@ -22,14 +22,14 @@
       "height_m": 0.08,
       "design_mass_kg": 0.25,
       "simulation_behavior": "static",
-      "position_m": [0.38, 0.16, 0.0]
+      "position_m": [0.1283, 0.1674, 0.0]
     },
     "v60": {
-      "maximum_diameter_m": 0.1,
+      "maximum_diameter_m": 0.076,
       "height_m": 0.09,
       "design_mass_kg": 0.12,
       "simulation_behavior": "static",
-      "position_m": [0.38, 0.16, 0.08],
+      "position_m": [0.1283, 0.1674, 0.073],
       "coffee_bed_target_radius_m": 0.038
     },
     "pitcher": {

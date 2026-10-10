@@ -5,11 +5,11 @@ MJCF primitive geometry and built-in textures; there are no downloaded meshes, t
 other third-party scene assets.
 
 The counter surface is the local `z = 0` datum. Jumper's standing slot is centred at the origin
-and faces `+X`. The nearest fixed prop surface is 0.362 m from the slot centre, leaving 0.112 m
-beyond the marked 0.25 m radius. The free pitcher is deliberately inside that boundary at
-`(0.18698, 0.02047, 0.001)` m so the carried claw can approach it; it is not part of the fixed
-clearance claim. The V60 is fixed directly above the server at `(0.38, 0.16)` m. Named sites mark
-the standing slot, forward direction, centred pitcher grip, spout tip, and coffee-bed target.
+and faces `+X`. The free pitcher starts at `(0.18698, 0.02047, 0.001)` m so the carried claw can
+approach it. The V60 is fixed into the server at `(0.1283, 0.1674)` m, inside the measured
+carried-arm workspace; replay checks gate physical robot/brewer contact and pitcher clearance throughout
+the pour. Named sites mark the standing slot, forward direction, centred pitcher grip, spout tip,
+and coffee-bed target.
 
 ## Dimensions and design masses
 
@@ -17,9 +17,9 @@ the standing slot, forward direction, centred pitcher grip, spout tip, and coffe
 |---|---:|---:|---|
 | Counter | 1.20 × 0.80 × 0.04 m | 18.00 kg | Static slab; top at `z = 0` |
 | Cup/server | 0.090 m diameter × 0.080 m high | 0.250 kg | Static |
-| V60 | 0.100 m maximum diameter × 0.090 m high | 0.120 kg | Static stepped-cone proxy on server |
+| V60 | 0.076 m maximum diameter × 0.090 m high | 0.120 kg | Static stepped-cone proxy on server |
 | Pitcher vessel | 0.056 m body diameter × 0.080 m high; 0.129 m spout reach | 0.240 kg | Free rigid body |
-| Centred top-grip add-on | 0.064 m overall bar × 0.024 m diameter; two 0.008 m struts | 0.024 kg | Hollow 3D-printed PETG bridge; ordinary contact geometry |
+| Centred top-grip add-on | 0.064 m overall bar × 0.024 m diameter; keyed end stops and two 0.008 m struts | 0.024 kg | Hollow 3D-printed PETG bridge; ordinary contact geometry |
 | Nominal water | 180 mL at 1000 kg/m³ | 0.180 kg | Rigid interior mass proxy; not fluid |
 | Pitcher + add-on + nominal water | — | **0.444 kg** | 0.006 kg below the 0.450 kg design limit |
 
