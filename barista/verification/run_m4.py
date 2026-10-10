@@ -28,6 +28,12 @@ FAST_CHECK_END_PHASE = "pour_out"
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--trajectory",
+        type=Path,
+        default=TRAJECTORY,
+        help="trajectory JSON (defaults to the canonical M4 trajectory)",
+    )
     parser.add_argument("--no-render", action="store_true")
     parser.add_argument(
         "--fast-check",
@@ -250,7 +256,8 @@ def main() -> int:
 
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    config = json.loads(TRAJECTORY.read_text("utf-8"))
+    trajectory = args.trajectory.resolve()
+    config = json.loads(trajectory.read_text("utf-8"))
     seed = int(config["seed"])
     commit_sha = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
@@ -378,7 +385,7 @@ def main() -> int:
     settled_base_rot = None
     grasp_reference = None
     carried_reference_set = False
-    config_sha256 = hashlib.sha256(TRAJECTORY.read_bytes()).hexdigest()
+    config_sha256 = hashlib.sha256(trajectory.read_bytes()).hexdigest()
     stream_cfg = config["stream"]
     bed_centre = np.asarray(stream_cfg["bed_centre_m"], dtype=np.float64)
     compiled_bed = data.site_xpos[bed_site].copy()
@@ -544,6 +551,8 @@ def main() -> int:
             fixed_contact = moving_contact = counter_contact = brewer_contact = False
             robot_brewer_contact = False
             non_claw_robot_contact = self_contact = False
+            fixed_contact_positions: list[np.ndarray] = []
+            moving_contact_positions: list[np.ndarray] = []
             support_touching: set[int] = set()
             contact_names: list[str] = []
             for contact_index in range(data.ncon):
@@ -568,6 +577,13 @@ def main() -> int:
                 contact_names.append(other_name)
                 fixed_contact |= "robot/LF_palm" in other_name
                 moving_contact |= "robot/LF_finger" in other_name
+                contact_in_pitcher = pitcher_rot.T @ (
+                    np.asarray(contact.pos, dtype=np.float64) - pitcher_pos
+                )
+                if "robot/LF_palm" in other_name:
+                    fixed_contact_positions.append(contact_in_pitcher)
+                if "robot/LF_finger" in other_name:
+                    moving_contact_positions.append(contact_in_pitcher)
                 counter_contact |= other == terrain
                 brewer_contact |= other in brewer_geoms
                 if other_name.startswith("robot/") and not any(
@@ -659,6 +675,14 @@ def main() -> int:
                 "brewer_clearance_m": clearance,
                 "fixed_jaw_contact": fixed_contact,
                 "moving_jaw_contact": moving_contact,
+                "fixed_jaw_contact_centre_pitcher_m": (
+                    ";".join(f"{value:.9f}" for value in np.mean(fixed_contact_positions, axis=0))
+                    if fixed_contact_positions else ""
+                ),
+                "moving_jaw_contact_centre_pitcher_m": (
+                    ";".join(f"{value:.9f}" for value in np.mean(moving_contact_positions, axis=0))
+                    if moving_contact_positions else ""
+                ),
                 "counter_contact": counter_contact, "brewer_contact": brewer_contact,
                 "robot_brewer_contact": robot_brewer_contact,
                 "non_claw_robot_contact": non_claw_robot_contact,
@@ -950,7 +974,7 @@ def main() -> int:
             "actuator_base_class": ServoCurveActuator.__name__,
             "common_compute_called_by_subclass": True,
         },
-        "trajectory_source": str(TRAJECTORY), "trajectory_sha256": config_sha256,
+        "trajectory_source": str(trajectory), "trajectory_sha256": config_sha256,
         "trajectory_method": config["source"], "input_shas": config["provenance"],
         "physics_dt_s": dt_s, "physics_sample_rate_hz": 1.0 / dt_s,
         "nominal_physics_dt_s": nominal_dt_s,

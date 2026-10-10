@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "seed": 41001,
+  "physics_dt_s": 0.005,
+  "control_dt_s": 0.02,
+  "stream_dt_s": 0.02,
+  "render_fps": 50,
+  "provenance": {
+    "accepted_m3_sha": "d83843b3b0bb0dc1e11a68b46e040fb32959ab12",
+    "prerequisite_base_sha": "9ff065c79277bae82949970c85af3346e15a4fdc"
+  },
+  "source": {
+    "method": "deterministic static raised hold using the accepted M3 arm pose",
+    "residual_rl": false,
+    "water_model": "visual approximation only; represented water mass remains rigid"
+  },
+  "base_start": {
+    "position_m": [0.0, 0.0, 0.10647],
+    "yaw_rad": 0.0
+  },
+  "arm_joint_order": ["LF_J0_joint", "LF_J1_joint", "LF_J2_joint", "LF_J3_joint"],
+  "support_pour_rad": {},
+  "support_base_rad": {},
+  "support_pour_profile_s": {
+    "scale": 0.0,
+    "raise_start": 17.5,
+    "raise_end": 21.5,
+    "lower_start": 60.0,
+    "lower_end": 64.0
+  },
+  "keyframes": [
+    {"phase": "settle", "end_s": 1.0, "arm_rad": [-0.5236, -1.8, -0.5236, -1.309], "finger_rad": -0.65},
+    {"phase": "approach", "end_s": 3.0, "arm_rad": [-0.5236, -1.8, -0.5236, -1.309], "finger_rad": -0.65},
+    {"phase": "close", "end_s": 4.0, "arm_rad": [-0.5236, -1.8, -0.5236, -1.309], "finger_rad": 0.0},
+    {"phase": "lift", "end_s": 6.0, "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043], "finger_rad": 0.0},
+    {"phase": "lift_settle", "end_s": 14.0, "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043], "finger_rad": 0.0},
+    {"phase": "lift_hold", "end_s": 17.5, "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043], "finger_rad": 0.0},
+    {"phase": "transit", "end_s": 21.5, "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043], "finger_rad": 0.0},
+    {"phase": "pour_in", "end_s": 23.5, "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043], "finger_rad": 0.0},
+    {"phase": "spiral", "end_s": 48.5, "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043], "finger_rad": 0.0},
+    {"phase": "pour_out", "end_s": 50.5, "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043], "finger_rad": 0.0}
+  ],
+  "stream": {
+    "phase": "spiral",
+    "direction": "stationary diagnostic",
+    "turns": 0.0,
+    "start_radius_m": 0.0,
+    "end_radius_m": 0.0,
+    "bed_centre_m": [0.0934, 0.1811, 0.155],
+    "bed_acceptance_radius_m": 0.038,
+    "required_edge_margin_m": 0.005,
+    "required_success_rate": 0.95,
+    "gravity_m_s2": 9.81
+  },
+  "set_down_target_m": [0.173, 0.0393, -0.002],
+  "thresholds": {
+    "lift_m": 0.05,
+    "m3_hold_s": 3.0,
+    "spout_height_min_m": 0.02,
+    "spout_height_max_m": 0.05,
+    "minimum_turns": 3.0,
+    "maximum_turns": 4.0,
+    "minimum_radial_progress_m": 0.015,
+    "maximum_radial_fit_rmse_m": 0.005,
+    "maximum_inward_excursion_m": 0.01,
+    "paper_edge_margin_m": 0.005,
+    "landing_success_rate": 0.95,
+    "pitcher_tilt_deg": 55.0,
+    "grasp_translation_m": 0.02,
+    "grasp_rotation_deg": 12.0,
+    "carried_grasp_rotation_deg": 12.0,
+    "base_xy_drift_m": 0.02,
+    "base_roll_pitch_deg": 5.0,
+    "set_down_position_error_m": 0.02,
+    "set_down_linear_speed_m_s": 0.01,
+    "set_down_angular_speed_rad_s": 0.1,
+    "retreat_pitcher_motion_m": 0.015,
+    "final_settle_s": 2.0,
+    "continuous_torque_nm": 1.2,
+    "peak_duration_s": 0.3,
+    "minimum_pour_tilt_deg": 12.0,
+    "maximum_horizontal_span_m": 0.006,
+    "maximum_horizontal_launch_speed_m_s": 0.2,
+    "minimum_brewer_clearance_m": 0.0
+  }
+}

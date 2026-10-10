@@ -16,7 +16,7 @@
     "assetDir": ".",
     "terrainType": "none",
     "counts": {
-      "geoms": 23,
+      "geoms": 44,
       "bodies": 3,
       "lights": 2
     },
@@ -34,13 +34,34 @@
       "counter_back",
       "server_body",
       "server_handle",
-      "v60_1",
-      "v60_2",
-      "v60_3",
-      "v60_4",
-      "v60_5",
+      "v60_support",
+      "v60_rib_01",
+      "v60_rib_02",
+      "v60_rib_03",
+      "v60_rib_04",
+      "v60_rib_05",
+      "v60_rib_06",
+      "v60_rib_07",
+      "v60_rib_08",
+      "v60_rib_09",
+      "v60_rib_10",
+      "v60_rib_11",
+      "v60_rib_12",
+      "v60_rim_01",
+      "v60_rim_02",
+      "v60_rim_03",
+      "v60_rim_04",
+      "v60_rim_05",
+      "v60_rim_06",
+      "v60_rim_07",
+      "v60_rim_08",
+      "v60_rim_09",
+      "v60_rim_10",
+      "v60_rim_11",
+      "v60_rim_12",
       "pitcher_body",
       "top_grip_bar",
+      "top_grip_safety_shelf",
       "top_grip_collar_a",
       "top_grip_collar_b",
       "top_grip_strut_a",
@@ -74,6 +95,7 @@
         "handle_outer",
         "handle_lower",
         "top_grip_bar",
+        "top_grip_safety_shelf",
         "top_grip_collar_a",
         "top_grip_collar_b",
         "top_grip_strut_a",
@@ -96,8 +118,8 @@
   },
   "files": {
     "scene.xml": {
-      "bytes": 7296,
-      "sha256": "51a5faff2e24a32e905aa12df01b46ca8beddcfaf787a31ea54ae80cc86b9fd1"
+      "bytes": 11703,
+      "sha256": "68914e92f0c91653fbaba8870f97cfe556238b1f0ff192b74d8debf59624cbb9"
     }
   }
 }
