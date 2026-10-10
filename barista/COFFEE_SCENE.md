@@ -80,12 +80,33 @@ radially away and rights the pitcher to about 5°.
 
 After pouring, the pitcher returns to its pickup spot (`set_down_target_m`). The arm goes back to
 the grasp pose while the five-support body lowers (44.5-47.5 s), so the contact-triggered release
-happens in `lower`/`set_down`. The claw stays open while it backs off and rises; it closes only
-after it is clear. `barista/verification/m4_spout_metrics.py` recomputes the spiral, rotation,
-per-phase contact/body/clearance and per-joint torque tables from a replay's raw logs.
+happens in `lower`/`set_down`. Once the claw is open, `clear_retreat` blends from the arm pose
+held at contact (not the nominal release keyframe, which used to step the LF_J2/J3 targets and
+shove the released pitcher). It lifts the palm straight up with J1 only, with no yaw, so the palm
+separates without dragging the pitcher. The claw rises clear and closes only after that.
+`barista/verification/m4_spout_metrics.py` recomputes the spiral, rotation, stream, per-phase
+contact/body/clearance, set-down, payload and per-joint torque tables from a replay's raw logs.
 
-Open (for t_41ccaaa7): as the open claw backs off the grip in `clear_retreat`, it still rocks the
-released pitcher by up to about 9° and moves it about 10 mm before the pitcher settles upright.
-The retreat gate (15 mm) passes, but the release is not yet clean. The fast check
-(`run_m4.py --fast-check`) stops at the end of `pour_out`. Set-down, release and retreat evidence
-needs the full verifier.
+## Stream and collision gates (simulation only)
+
+The water stream is a massless visual approximation, not fluid. Every 20 ms of the spiral it is
+launched from the measured `pitcher_spout_tip` pose and its measured linear velocity, then
+follows a gravity-only ballistic path to the bed plane. The rendered stream is the same logged
+path. `run_m4.py` gates:
+
+- horizontal span of at most 6 mm and horizontal launch speed of at most 0.2 m/s;
+- a valid bed intersection, with the path ray-cast against all scene and robot geometry. A
+  control ray straight down must hit the brewer, which proves the check can see it;
+- at least 95% of landings within 33 mm (the 38 mm acceptance radius less a 5 mm edge margin).
+
+Collision gates run over the whole replay. They cover robot-brewer contact, free-leg contact
+(the LF claw limb may touch only the pitcher), any robot contact with scene geometry other than
+the counter, and pitcher-brewer, non-claw, self and joint-limit contacts. Measured signed
+clearance is taken from every pitcher geom, including the visual-only spout, and from all 48
+robot collision geoms to the brewer. An integrity gate fails if contact is disabled, if any
+brewer geom is non-collidable, if the filters stop robot or pitcher geoms colliding with the
+brewer, if a brewer contact exclusion exists, or if the pitcher's non-collidable set grows beyond
+its visual/mass-only spout, water surface and water-mass proxy.
+
+The fast check (`run_m4.py --fast-check`) stops at the end of `pour_out`. Set-down, release and
+retreat evidence needs the full verifier.

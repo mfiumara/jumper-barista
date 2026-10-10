@@ -89,6 +89,132 @@ def _geom_clearance(mujoco, model, data, geom1: int, geom2: int, fromto) -> tupl
     return confirmed, raw
 
 
+# Pairs whose bounding spheres are further apart than this are not passed to the exact
+# distance solver; their bounding-sphere gap (a lower bound on the true clearance) is used
+# instead, so a reported minimum is never larger than the true minimum.
+CLEARANCE_PREFILTER_M = 0.05
+# The pitcher's spout, the water surface and the rigid water-mass proxy are visual or
+# mass-only by scene design (since the M2 scene, eb664d8). They are listed so that any
+# further physical geometry made non-collidable fails the integrity gate. Clearance to
+# the brewer is still measured from every pitcher geom, these included.
+EXPECTED_PITCHER_NONCOLLIDING = (
+    "nominal_water_mass", "spout_lower", "spout_riser", "spout_tip", "water_surface",
+)
+STREAM_PATH_POINTS = 13
+# The front-left limb carries the claw. It is the one limb that is never a support, so it
+# is the "free leg" of the charter: it may touch only the pitcher, never the counter, the
+# brewer or any other scene geometry.
+FREE_LEG_PREFIX = "robot/LF_"
+# Upright set-down: the released pitcher must stand within this tilt of its settled pose.
+UPRIGHT_SET_DOWN_TILT_DEG = 5.0
+
+
+def _filter_compatible(model, geom1: int, geom2: int) -> bool:
+    return bool(
+        (model.geom_contype[geom1] & model.geom_conaffinity[geom2])
+        or (model.geom_contype[geom2] & model.geom_conaffinity[geom1])
+    )
+
+
+def _collision_integrity(model, mujoco, robot_geoms, brewer_geoms, pitcher_geoms) -> dict:
+    """Prove collisions are physically enabled rather than evaded by disabling geometry."""
+
+    def short(index: int) -> str:
+        return _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index).split("/")[-1]
+
+    def collidable(index: int) -> bool:
+        return bool(model.geom_contype[index] or model.geom_conaffinity[index])
+
+    brewer_noncollidable = [short(index) for index in brewer_geoms if not collidable(index)]
+    pitcher_noncollidable = sorted(
+        short(index) for index in pitcher_geoms if not collidable(index)
+    )
+    pitcher_physical = [index for index in pitcher_geoms if collidable(index)]
+    robot_brewer_incompatible = sum(
+        not _filter_compatible(model, robot, brewer)
+        for robot in robot_geoms for brewer in brewer_geoms
+    )
+    pitcher_brewer_incompatible = sum(
+        not _filter_compatible(model, pitcher, brewer)
+        for pitcher in pitcher_physical for brewer in brewer_geoms
+    )
+    guarded_bodies = {int(model.geom_bodyid[index]) for index in brewer_geoms}
+    excluded = []
+    for signature in np.asarray(model.exclude_signature).ravel():
+        body1, body2 = int(signature) >> 16, int(signature) & 0xFFFF
+        if body1 in guarded_bodies or body2 in guarded_bodies:
+            excluded.append([
+                _name(model, mujoco, mujoco.mjtObj.mjOBJ_BODY, body1),
+                _name(model, mujoco, mujoco.mjtObj.mjOBJ_BODY, body2),
+            ])
+    contact_disabled = bool(model.opt.disableflags & mujoco.mjtDisableBit.mjDSBL_CONTACT)
+    checks = {
+        "contact_enabled": not contact_disabled,
+        "every_brewer_geom_collidable": not brewer_noncollidable and bool(brewer_geoms),
+        "pitcher_noncollidable_set_unchanged": sorted(
+            next((name for name in EXPECTED_PITCHER_NONCOLLIDING if geom.endswith(name)), geom)
+            for geom in pitcher_noncollidable
+        ) == sorted(EXPECTED_PITCHER_NONCOLLIDING),
+        "robot_brewer_filters_compatible": robot_brewer_incompatible == 0,
+        "pitcher_brewer_filters_compatible": pitcher_brewer_incompatible == 0,
+        "no_brewer_contact_exclusions": not excluded,
+    }
+    return {
+        "robot_collision_geom_count": len(robot_geoms),
+        "brewer_geom_count": len(brewer_geoms),
+        "pitcher_collidable_geoms": sorted(short(index) for index in pitcher_physical),
+        "pitcher_noncollidable_geoms": pitcher_noncollidable,
+        "brewer_noncollidable_geoms": brewer_noncollidable,
+        "robot_brewer_incompatible_pairs": robot_brewer_incompatible,
+        "pitcher_brewer_incompatible_pairs": pitcher_brewer_incompatible,
+        "brewer_contact_exclusions": excluded,
+        "checks": checks,
+        "passes": all(checks.values()),
+    }
+
+
+def _set_clearance(
+    mujoco, model, data, set_a: np.ndarray, set_b: np.ndarray, fromto
+) -> tuple[float, int, int]:
+    """Lower-bound-safe minimum signed distance between two geom sets.
+
+    Near pairs (bounding-sphere gap <= CLEARANCE_PREFILTER_M) are measured exactly with
+    the confirmed solver; far pairs contribute their bounding-sphere gap, which is never
+    larger than the true distance.
+    """
+    gap = (
+        np.linalg.norm(data.geom_xpos[set_a][:, None, :] - data.geom_xpos[set_b][None], axis=2)
+        - model.geom_rbound[set_a][:, None] - model.geom_rbound[set_b][None]
+    )
+    best, best_a, best_b = math.inf, -1, -1
+    for row, col in zip(*np.nonzero(gap <= CLEARANCE_PREFILTER_M), strict=True):
+        confirmed, _ = _geom_clearance(
+            mujoco, model, data, int(set_a[row]), int(set_b[col]), fromto
+        )
+        if confirmed < best:
+            best, best_a, best_b = confirmed, int(set_a[row]), int(set_b[col])
+    far = gap > CLEARANCE_PREFILTER_M
+    if far.any():
+        far_gap = np.where(far, gap, np.inf)
+        row, col = np.unravel_index(int(np.argmin(far_gap)), far_gap.shape)
+        if far_gap[row, col] < best:
+            best, best_a, best_b = float(far_gap[row, col]), int(set_a[row]), int(set_b[col])
+    return best, best_a, best_b
+
+
+def _stream_path(
+    start: np.ndarray, velocity: np.ndarray, flight_s: float, gravity: float
+) -> list[np.ndarray]:
+    """Gravity-only ballistic path from the measured spout pose and velocity."""
+    points = []
+    for fraction in np.linspace(0.0, 1.0, STREAM_PATH_POINTS):
+        time_s = fraction * flight_s
+        point = start + velocity * time_s
+        point[2] -= 0.5 * gravity * time_s * time_s
+        points.append(point)
+    return points
+
+
 def _smooth(value: float) -> float:
     value = float(np.clip(value, 0.0, 1.0))
     return value * value * (3.0 - 2.0 * value)
@@ -114,6 +240,24 @@ def _target(config: dict, time_s: float) -> tuple[str, np.ndarray, float]:
     return keyframes[-1]["phase"], previous_arm, previous_finger
 
 
+def _blend_from(config: dict, time_s: float, start_arm: np.ndarray) -> np.ndarray:
+    """Interpolate the current keyframe segment from a measured start pose.
+
+    Used after a contact-triggered set-down, where the arm is held at its measured
+    contact pose rather than the nominal keyframe: starting the next segment from the
+    nominal pose would step the joint targets and shove the released pitcher.
+    """
+    previous_time = 0.0
+    for keyframe in config["keyframes"]:
+        end = float(keyframe["end_s"])
+        if time_s <= end:
+            fraction = _smooth((time_s - previous_time) / max(end - previous_time, 1e-12))
+            arm = np.asarray(keyframe["arm_rad"], dtype=np.float64)
+            return start_arm + (arm - start_arm) * fraction
+        previous_time = end
+    return np.asarray(config["keyframes"][-1]["arm_rad"], dtype=np.float64)
+
+
 def _rotation_angle_deg(rotation: np.ndarray) -> float:
     cosine = float(np.clip((np.trace(rotation) - 1.0) / 2.0, -1.0, 1.0))
     return math.degrees(math.acos(cosine))
@@ -137,9 +281,7 @@ def _render(
     model,
     mujoco,
     states: np.ndarray,
-    stream_landings: list[np.ndarray | None],
-    spout_site: int,
-    bed_z: float,
+    stream_paths: list[list[np.ndarray] | None],
     camera: int,
     fps: float,
     path: Path,
@@ -154,21 +296,13 @@ def _render(
     renderer = mujoco.Renderer(model, height=HEIGHT, width=WIDTH)
     data = mujoco.MjData(model)
     try:
-        for state, landing in zip(states, stream_landings, strict=True):
+        for state, points in zip(states, stream_paths, strict=True):
             data.qpos[:] = state
             mujoco.mj_forward(model, data)
             renderer.update_scene(data, camera=camera)
-            if landing is not None:
-                start = data.site_xpos[spout_site].copy()
-                flight_s = math.sqrt(max(2.0 * (start[2] - bed_z) / 9.81, 1e-9))
-                velocity = (landing - start) / flight_s
-                velocity[2] = 0.0
-                points = []
-                for fraction in np.linspace(0.0, 1.0, 13):
-                    time_s = fraction * flight_s
-                    point = start + velocity * time_s
-                    point[2] -= 0.5 * 9.81 * time_s * time_s
-                    points.append(point)
+            # The drawn stream is exactly the logged ballistic path launched from the
+            # measured spout pose and velocity at this substep (simulation-only visual).
+            if points is not None:
                 for first, second in itertools.pairwise(points):
                     renderer.scene.ngeom += 1
                     geom = renderer.scene.geoms[renderer.scene.ngeom - 1]
@@ -382,6 +516,16 @@ def main() -> int:
         _ending(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, "ngeom", suffix)
         for suffix in support_suffixes
     }
+    robot_collision_geoms = sorted(
+        index for index in range(model.ngeom)
+        if _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index).startswith("robot/")
+        and (model.geom_contype[index] or model.geom_conaffinity[index])
+    )
+    collision_integrity = _collision_integrity(
+        model, mujoco, robot_collision_geoms, sorted(brewer_geoms), sorted(pitcher_geoms)
+    )
+    robot_geom_array = np.asarray(robot_collision_geoms, dtype=np.int64)
+    brewer_geom_array = np.asarray(sorted(brewer_geoms), dtype=np.int64)
 
     nominal_dt_s = float(config["physics_dt_s"])
     dt_s = float(model.opt.timestep)
@@ -410,7 +554,8 @@ def main() -> int:
     stream_rows: list[dict] = []
     render_states: list[np.ndarray] = []
     corrected_clearance_readings: list[dict] = []
-    render_stream_landings: list[np.ndarray | None] = []
+    render_stream_paths: list[list[np.ndarray] | None] = []
+    ray_sanity_geom: str | None = None
     above_window = np.zeros(len(joint_order), dtype=np.int64)
     above_elapsed = np.zeros(len(joint_order), dtype=np.float64)
     next_window = np.zeros(len(joint_order), dtype=np.int64)
@@ -424,6 +569,10 @@ def main() -> int:
     config_sha256 = hashlib.sha256(trajectory.read_bytes()).hexdigest()
     stream_cfg = config["stream"]
     bed_centre = np.asarray(stream_cfg["bed_centre_m"], dtype=np.float64)
+    # A landing is accepted only inside the acceptance radius less the required edge margin.
+    landing_limit_m = float(stream_cfg["bed_acceptance_radius_m"]) - float(
+        stream_cfg["required_edge_margin_m"]
+    )
     compiled_bed = data.site_xpos[bed_site].copy()
     if np.linalg.norm(compiled_bed - bed_centre) > 1e-9:
         raise RuntimeError(f"compiled bed centre {compiled_bed} differs from trajectory")
@@ -441,6 +590,9 @@ def main() -> int:
                     assert set_down_arm is not None
                     arm = set_down_arm
                     finger_request = -1.4
+                elif set_down_contact_seen and phase == "clear_retreat":
+                    assert set_down_arm is not None
+                    arm = _blend_from(config, time_s, set_down_arm)
                 target[:] = [HOME[name] for name in joint_order]
                 base_fraction = _smooth((time_s - 4.0) / 2.0)
                 support_base = dict(HOME)
@@ -585,7 +737,7 @@ def main() -> int:
                 settled_base_rot = base_rot.copy()
 
             fixed_contact = moving_contact = counter_contact = brewer_contact = False
-            robot_brewer_contact = False
+            robot_brewer_contact = robot_scene_contact = free_leg_contact = False
             non_claw_robot_contact = self_contact = False
             fixed_contact_positions: list[np.ndarray] = []
             moving_contact_positions: list[np.ndarray] = []
@@ -604,6 +756,15 @@ def main() -> int:
                     robot_brewer_contact = True
                 if name1.startswith("robot/") and name2.startswith("robot/"):
                     self_contact = True
+                for robot_name, other_geom, other_name in (
+                    (name1, geom2, name2), (name2, geom1, name1)
+                ):
+                    if not robot_name.startswith("robot/") or other_name.startswith("robot/"):
+                        continue
+                    if other_geom not in pitcher_geoms and other_geom != terrain:
+                        robot_scene_contact = True
+                    if robot_name.startswith(FREE_LEG_PREFIX) and other_geom not in pitcher_geoms:
+                        free_leg_contact = True
                 if terrain in (geom1, geom2):
                     support_touching.update({geom for geom in (geom1, geom2) if geom in support_geoms})
                 if not pitcher_geoms.intersection((geom1, geom2)):
@@ -657,6 +818,9 @@ def main() -> int:
                             "raw_m": raw, "confirmed_m": confirmed,
                         })
                     clearance = min(clearance, confirmed)
+            robot_clearance, robot_near, brewer_near = _set_clearance(
+                mujoco, model, data, robot_geom_array, brewer_geom_array, fromto
+            )
 
             if settled_pitcher_rot is None:
                 tilt = base_roll = base_pitch = base_drift = lift = 0.0
@@ -718,6 +882,11 @@ def main() -> int:
                 "base_roll_deg": base_roll, "base_pitch_deg": base_pitch,
                 "support_foot_contacts": len(support_touching),
                 "brewer_clearance_m": clearance,
+                "robot_brewer_clearance_m": robot_clearance,
+                "robot_brewer_nearest_pair": (
+                    f"{_name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, robot_near)};"
+                    f"{_name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, brewer_near)}"
+                ),
                 "fixed_jaw_contact": fixed_contact,
                 "moving_jaw_contact": moving_contact,
                 "fixed_jaw_contact_centre_pitcher_m": (
@@ -730,25 +899,26 @@ def main() -> int:
                 ),
                 "counter_contact": counter_contact, "brewer_contact": brewer_contact,
                 "robot_brewer_contact": robot_brewer_contact,
+                "robot_scene_contact": robot_scene_contact,
+                "free_leg_contact": free_leg_contact,
                 "non_claw_robot_contact": non_claw_robot_contact,
                 "self_contact": self_contact, "joint_limit_violation": joint_limit_violation,
                 "pitcher_contact_geoms": ";".join(sorted(set(contact_names))),
             })
             landing = None
+            stream_points = None
             if phase == "spiral" and step % control_decimation == 0:
                 # The massless visual stream inherits the measured outlet velocity and then
                 # follows a gravity-only ballistic path to the bed. Both its origin and landing
                 # are therefore driven by the actual spout, never a prescribed target spiral.
+                gravity = float(stream_cfg["gravity_m_s2"])
                 height = float(spout_pos[2] - bed_centre[2])
                 intersects = height > 0.0
                 flight_s = (
                     (
                         float(spout_linear_velocity[2])
-                        + math.sqrt(
-                            float(spout_linear_velocity[2]) ** 2
-                            + 2.0 * float(stream_cfg["gravity_m_s2"]) * height
-                        )
-                    ) / float(stream_cfg["gravity_m_s2"])
+                        + math.sqrt(float(spout_linear_velocity[2]) ** 2 + 2.0 * gravity * height)
+                    ) / gravity
                     if intersects else math.nan
                 )
                 landing = bed_centre.copy()
@@ -761,10 +931,45 @@ def main() -> int:
                 angle = math.atan2(
                     spout_pos[1] - bed_centre[1], spout_pos[0] - bed_centre[0]
                 )
-                accepted = (
-                    intersects
-                    and landing_radius <= float(stream_cfg["bed_acceptance_radius_m"])
-                )
+                # The drawn path must reach the bed through open air: every segment is ray
+                # cast against all scene and robot geometry except the pitcher it leaves.
+                obstruction = ""
+                if intersects:
+                    stream_points = _stream_path(
+                        spout_pos.copy(), spout_linear_velocity.copy(), flight_s, gravity
+                    )
+                    geom_hit = np.zeros(1, dtype=np.int32)
+                    for first, second in itertools.pairwise(stream_points):
+                        fraction = float(mujoco.mj_ray(
+                            model, data, first, second - first, None, 1, pitcher_body, geom_hit
+                        ))
+                        if 0.0 <= fraction < 1.0 - 1e-6:
+                            obstruction = _name(
+                                model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, int(geom_hit[0])
+                            )
+                            break
+                path_clear = intersects and not obstruction
+                if ray_sanity_geom is None:
+                    # Control: the same ray cast straight down through the bed must hit real
+                    # scene geometry, proving the obstruction check can see the brewer.
+                    geom_hit = np.zeros(1, dtype=np.int32)
+                    mujoco.mj_ray(
+                        model, data, spout_pos.copy(), np.asarray([0.0, 0.0, -1.0]),
+                        None, 1, pitcher_body, geom_hit,
+                    )
+                    ray_sanity_geom = (
+                        _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, int(geom_hit[0]))
+                        if geom_hit[0] >= 0 else ""
+                    )
+                accepted = path_clear and landing_radius <= landing_limit_m
+                if accepted:
+                    miss_reason = ""
+                elif not intersects:
+                    miss_reason = "spout not above bed"
+                elif obstruction:
+                    miss_reason = f"path obstructed by {obstruction}"
+                else:
+                    miss_reason = "outside acceptance disk less edge margin"
                 stream_rows.append({
                     "sample": len(stream_rows), "time_s": time_s + dt_s,
                     "stream_dt_s": float(config["stream_dt_s"]), "phase": phase,
@@ -780,13 +985,19 @@ def main() -> int:
                     "horizontal_launch_speed_m_s": horizontal_launch_speed,
                     "landing_x_m": float(landing[0]), "landing_y_m": float(landing[1]),
                     "landing_z_m": float(landing[2]), "landing_radius_m": landing_radius,
+                    "landing_edge_margin_m": (
+                        float(stream_cfg["bed_acceptance_radius_m"]) - landing_radius
+                    ),
+                    "path_unobstructed": path_clear, "path_obstruction_geom": obstruction,
                     "unwrapped_angle_rad": angle, "angle_rad": angle,
                     "accepted": accepted,
-                    "miss_reason": "" if accepted else "outside acceptance disk",
+                    "miss_reason": miss_reason,
                 })
             if step % render_stride == 0:
                 render_states.append(data.qpos.copy())
-                render_stream_landings.append(None if landing is None else landing.copy())
+                render_stream_paths.append(
+                    None if stream_points is None else [p.copy() for p in stream_points]
+                )
     finally:
         env.close()
 
@@ -860,7 +1071,6 @@ def main() -> int:
         for row in stream_rows if not row["accepted"]
     ]
     landing_success_rate = (len(stream_rows) - len(misses)) / len(stream_rows)
-    edge_margin = float(stream_cfg["bed_acceptance_radius_m"]) - float(np.max(radii))
     spout_min = min(row["spout_height_above_bed_m"] for row in pour_rows)
     spout_max = max(row["spout_height_above_bed_m"] for row in pour_rows)
     pour_in_rows = [row for row in motion_rows if row["phase"] == "pour_in"]
@@ -872,6 +1082,18 @@ def main() -> int:
         row["horizontal_launch_speed_m_s"] for row in stream_rows
     )
     maximum_landing_radius = float(np.max(landing_radii))
+    # The paper-edge margin is taken from whichever is further out: the actual spout or
+    # where its stream lands.
+    edge_margin = float(stream_cfg["bed_acceptance_radius_m"]) - max(
+        float(np.max(radii)), maximum_landing_radius
+    )
+    final_maximum_tilt = (
+        max(row["pitcher_tilt_deg"] for row in final_rows) if final_rows else math.nan
+    )
+    minimum_robot_brewer_clearance = min(
+        row["robot_brewer_clearance_m"] for row in motion_rows
+    )
+    nearest_robot_row = min(motion_rows, key=lambda row: row["robot_brewer_clearance_m"])
 
     final_target = np.asarray(config["set_down_target_m"], dtype=np.float64)
     final_positions = np.asarray([
@@ -955,6 +1177,20 @@ def main() -> int:
         ),
         "retreat_does_not_move_pitcher": retreat_motion
         <= float(threshold["retreat_pitcher_motion_m"]) if retreat_rows else False,
+        "upright_final_set_down": (
+            bool(final_rows) and final_maximum_tilt <= UPRIGHT_SET_DOWN_TILT_DEG
+        ),
+        "no_free_leg_or_robot_scene_contact": not any(
+            row["free_leg_contact"] or row["robot_scene_contact"] for row in motion_rows
+        ),
+        "nonnegative_robot_brewer_clearance": (
+            minimum_robot_brewer_clearance >= threshold["minimum_brewer_clearance_m"]
+        ),
+        "carried_robot_and_pitcher_brewer_clearance": min(
+            min(row["brewer_clearance_m"], row["robot_brewer_clearance_m"])
+            for row in carried_rows
+        ) >= threshold["minimum_brewer_clearance_m"],
+        "physical_collision_geometry_intact": collision_integrity["passes"],
     }
     stream_passes = {
         "sample_period": all(
@@ -971,6 +1207,10 @@ def main() -> int:
         "edge_margin": edge_margin >= threshold["paper_edge_margin_m"],
         "landing_success": landing_success_rate >= threshold["landing_success_rate"],
         "all_intersections_valid": all(row["intersection_valid"] for row in stream_rows),
+        "all_paths_unobstructed": all(row["path_unobstructed"] for row in stream_rows),
+        "obstruction_ray_sees_brewer": any(
+            token in (ray_sanity_geom or "") for token in ("server_", "v60_")
+        ),
         "plausible_horizontal_span": (
             maximum_horizontal_span <= threshold["maximum_horizontal_span_m"]
         ),
@@ -978,7 +1218,7 @@ def main() -> int:
             maximum_horizontal_launch_speed
             <= threshold["maximum_horizontal_launch_speed_m_s"]
         ),
-        "no_emission_after_pour_out": True,
+        "no_emission_after_pour_out": all(row["phase"] == "spiral" for row in stream_rows),
     }
     reachability_checks = {
         "physical_pickup_and_hold": (
@@ -1007,8 +1247,14 @@ def main() -> int:
             for row in reachability_rows
         ),
         "nonnegative_brewer_clearance": min(
-            row["brewer_clearance_m"] for row in reachability_rows
+            min(row["brewer_clearance_m"], row["robot_brewer_clearance_m"])
+            for row in reachability_rows
         ) >= 0.0,
+        "no_free_leg_or_robot_scene_contact": not any(
+            row["free_leg_contact"] or row["robot_scene_contact"]
+            for row in reachability_rows
+        ),
+        "physical_collision_geometry_intact": collision_integrity["passes"],
         "support_stable": min(
             row["support_foot_contacts"] for row in reachability_rows
         ) >= 4,
@@ -1044,8 +1290,8 @@ def main() -> int:
     render_enabled = not args.no_render and not args.fast_check
     if render_enabled:
         _render(
-            model, mujoco, qpos_array, render_stream_landings, spout_site,
-            float(bed_centre[2]), camera, float(config["render_fps"]), video,
+            model, mujoco, qpos_array, render_stream_paths, camera,
+            float(config["render_fps"]), video,
         )
         for timestamp, frame in ((35.0, spiral_frame), (55.0, set_down_frame)):
             subprocess.run([
@@ -1126,6 +1372,20 @@ def main() -> int:
             "minimum_carried_brewer_clearance_m": min(
                 row["brewer_clearance_m"] for row in carried_rows
             ),
+            "minimum_carried_robot_brewer_clearance_m": min(
+                row["robot_brewer_clearance_m"] for row in carried_rows
+            ),
+            "minimum_pitcher_brewer_clearance_all_phases_m": min(
+                row["brewer_clearance_m"] for row in motion_rows
+            ),
+            "minimum_robot_brewer_clearance_all_phases_m": minimum_robot_brewer_clearance,
+            "nearest_robot_brewer_pair": nearest_robot_row["robot_brewer_nearest_pair"],
+            "nearest_robot_brewer_time_s": nearest_robot_row["time_s"],
+            "free_leg_contact_rows": sum(row["free_leg_contact"] for row in motion_rows),
+            "robot_scene_contact_rows": sum(row["robot_scene_contact"] for row in motion_rows),
+            "maximum_final_tilt_deg": final_maximum_tilt,
+            "upright_set_down_tilt_limit_deg": UPRIGHT_SET_DOWN_TILT_DEG,
+            "collision_integrity": collision_integrity,
             "final_set_down_target_m": final_target.tolist(),
             "maximum_final_position_error_m": final_position_error,
             "maximum_final_linear_speed_m_s": max(
@@ -1154,6 +1414,11 @@ def main() -> int:
             "paper_edge_radius_m": float(stream_cfg["bed_acceptance_radius_m"]),
             "minimum_edge_margin_m": edge_margin,
             "maximum_landing_radius_m": maximum_landing_radius,
+            "landing_acceptance_limit_m": landing_limit_m,
+            "obstructed_path_count": sum(
+                not row["path_unobstructed"] for row in stream_rows
+            ),
+            "obstruction_ray_control_hit_geom": ray_sanity_geom,
             "maximum_horizontal_span_m": maximum_horizontal_span,
             "maximum_horizontal_launch_speed_m_s": maximum_horizontal_launch_speed,
             "landing_success_count": len(stream_rows) - len(misses),
@@ -1230,6 +1495,15 @@ def main() -> int:
           f"edge margin={edge_margin:.6f} m")
     print(f"[m4] set-down error={final_position_error:.6f} m; "
           f"retreat motion={retreat_motion:.6f} m")
+    print(f"[m4] stream span<={maximum_horizontal_span:.6f} m; "
+          f"launch speed<={maximum_horizontal_launch_speed:.6f} m/s; "
+          f"max landing radius={maximum_landing_radius:.6f} m; "
+          f"obstructed paths={summary['stream']['obstructed_path_count']}")
+    print(f"[m4] min clearance to brewer: pitcher="
+          f"{summary['motion']['minimum_pitcher_brewer_clearance_all_phases_m']:.6f} m, "
+          f"robot={minimum_robot_brewer_clearance:.6f} m "
+          f"({nearest_robot_row['robot_brewer_nearest_pair']}); "
+          f"collision geometry intact={collision_integrity['passes']}")
     print(f"[m4] payload={payload['design_total_kg']:.3f} kg; "
           f"torque pass={torque_pass}; overall pass={summary['passes']}")
     print(f"[m4] qpos sha256={state_sha256}")

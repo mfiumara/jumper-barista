@@ -681,9 +681,9 @@
       "phase": "clear_retreat",
       "end_s": 52.0,
       "arm_rad": [
-        -0.661797812987609,
-        -1.9545485961872715,
-        -0.5206260988519148,
+        -0.535,
+        -1.98,
+        -0.752,
         -1.068145990371704
       ],
       "finger_rad": -1.4
@@ -692,7 +692,7 @@
       "phase": "retreat",
       "end_s": 54.0,
       "arm_rad": [
-        -0.6898975163385976,
+        -0.55,
         -2.5878028667900996,
         -0.7836952841006183,
         -1.068145990371704
@@ -703,7 +703,7 @@
       "phase": "final_settle",
       "end_s": 57.0,
       "arm_rad": [
-        -0.6898975163385976,
+        -0.55,
         -2.5878028667900996,
         -0.7836952841006183,
         -1.068145990371704
@@ -768,5 +768,5 @@
     "maximum_horizontal_launch_speed_m_s": 0.2,
     "minimum_brewer_clearance_m": 0.0
   },
-  "set_down_note": "pitcher returns to its pickup spot: upright pour-out pose, lower to the grasp pose while the body lowers (44.5-47.5 s), contact-triggered release, open claw backs off then rises"
+  "set_down_note": "pitcher returns to its pickup spot: upright pour-out pose, lower to the grasp pose while the body lowers (44.5-47.5 s), contact-triggered release; the open claw then lifts straight up from its measured contact pose (clear_retreat blends from the held set-down arm, J1 only, no yaw) so the palm separates without dragging the released pitcher, then rises clear"
 }
