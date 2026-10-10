@@ -16,7 +16,7 @@
     "assetDir": ".",
     "terrainType": "none",
     "counts": {
-      "geoms": 44,
+      "geoms": 49,
       "bodies": 3,
       "lights": 2
     },
@@ -24,10 +24,7 @@
       "water_surface",
       "spout_lower",
       "spout_riser",
-      "spout_tip",
-      "handle_upper",
-      "handle_outer",
-      "handle_lower"
+      "spout_tip"
     ],
     "collidingGeoms": [
       "counter_surface",
@@ -60,12 +57,20 @@
       "v60_rim_11",
       "v60_rim_12",
       "pitcher_body",
+      "handle_upper",
+      "handle_outer",
+      "handle_lower",
       "top_grip_bar",
       "top_grip_safety_shelf",
       "top_grip_collar_a",
       "top_grip_collar_b",
       "top_grip_strut_a",
-      "top_grip_strut_b"
+      "top_grip_strut_b",
+      "top_grip_handle_clamp_top",
+      "top_grip_handle_clamp_bottom",
+      "top_grip_handle_clamp_side_a",
+      "top_grip_handle_clamp_side_b",
+      "top_grip_handle_post"
     ],
     "ground": {
       "geom": "counter_surface"
@@ -99,7 +104,12 @@
         "top_grip_collar_a",
         "top_grip_collar_b",
         "top_grip_strut_a",
-        "top_grip_strut_b"
+        "top_grip_strut_b",
+        "top_grip_handle_clamp_top",
+        "top_grip_handle_clamp_bottom",
+        "top_grip_handle_clamp_side_a",
+        "top_grip_handle_clamp_side_b",
+        "top_grip_handle_post"
       ]
     }
   ],
@@ -118,8 +128,8 @@
   },
   "files": {
     "scene.xml": {
-      "bytes": 11702,
-      "sha256": "332a8fe241bb74cded4728d910bb7ec6c2e0a2ef3762ffec689a0891b9b2fc7d"
+      "bytes": 13238,
+      "sha256": "6e709bfa51ac0f5787cc3af65517c930b4a22a62ef7a703c657283893bc9f722"
     }
   }
 }

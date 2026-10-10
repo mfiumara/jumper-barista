@@ -69,6 +69,26 @@ def _name(model, mujoco, kind, index: int) -> str:
     return mujoco.mj_id2name(model, kind, index) or f"unnamed_{index}"
 
 
+# mj_geomDistance's convex solver occasionally returns a spurious 0 (or bogus
+# negative) for a pair that is centimetres apart, for one substep only. A
+# non-positive reading is therefore confirmed at several distmax values and the
+# largest reading kept: a genuine contact or penetration reads <= 0 at every
+# distmax, so this never hides one.
+CLEARANCE_CONFIRM_DISTMAX_M = (0.003, 0.01, 0.05, 0.1, 0.5, 1.0)
+
+
+def _geom_clearance(mujoco, model, data, geom1: int, geom2: int, fromto) -> tuple[float, float]:
+    """Return (confirmed, raw) signed distance between two geoms."""
+    raw = float(mujoco.mj_geomDistance(model, data, geom1, geom2, 1.0, fromto))
+    if raw > 0.0:
+        return raw, raw
+    confirmed = max(
+        float(mujoco.mj_geomDistance(model, data, geom1, geom2, distmax, fromto))
+        for distmax in CLEARANCE_CONFIRM_DISTMAX_M
+    )
+    return confirmed, raw
+
+
 def _smooth(value: float) -> float:
     value = float(np.clip(value, 0.0, 1.0))
     return value * value * (3.0 - 2.0 * value)
@@ -389,6 +409,7 @@ def main() -> int:
     motion_rows: list[dict] = []
     stream_rows: list[dict] = []
     render_states: list[np.ndarray] = []
+    corrected_clearance_readings: list[dict] = []
     render_stream_landings: list[np.ndarray | None] = []
     above_window = np.zeros(len(joint_order), dtype=np.int64)
     above_elapsed = np.zeros(len(joint_order), dtype=np.float64)
@@ -621,12 +642,21 @@ def main() -> int:
             fromto = np.zeros(6, dtype=np.float64)
             for pitcher_geom in pitcher_geoms:
                 for brewer_geom in brewer_geoms:
-                    clearance = min(
-                        clearance,
-                        float(mujoco.mj_geomDistance(
-                            model, data, pitcher_geom, brewer_geom, 1.0, fromto
-                        )),
+                    confirmed, raw = _geom_clearance(
+                        mujoco, model, data, pitcher_geom, brewer_geom, fromto
                     )
+                    if confirmed != raw:
+                        corrected_clearance_readings.append({
+                            "substep": step, "phase": phase,
+                            "pitcher_geom": _name(
+                                model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, pitcher_geom
+                            ),
+                            "brewer_geom": _name(
+                                model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, brewer_geom
+                            ),
+                            "raw_m": raw, "confirmed_m": confirmed,
+                        })
+                    clearance = min(clearance, confirmed)
 
             if settled_pitcher_rot is None:
                 tilt = base_roll = base_pitch = base_drift = lift = 0.0
@@ -1155,6 +1185,14 @@ def main() -> int:
             "joint_count": len(joint_order), "curve_tolerance_nm": 1e-4,
             "thermal_tolerance": 1e-5, "passes": torque_pass,
             "per_joint_and_phase": torque_summary,
+        },
+        "brewer_clearance_solver_corrections": {
+            "note": (
+                "non-positive mj_geomDistance readings re-measured at several distmax "
+                "values; the largest reading is kept (genuine contacts stay <= 0)"
+            ),
+            "count": len(corrected_clearance_readings),
+            "readings": corrected_clearance_readings[:50],
         },
         "determinism": {
             "render_state_count": len(render_states), "qpos_sha256": state_sha256,

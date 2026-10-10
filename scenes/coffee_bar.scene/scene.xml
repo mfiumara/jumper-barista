@@ -4,8 +4,8 @@
   <!--
     Original project-owned primitive geometry. Dimensions are in metres and masses in
     kilograms. The complete design table is barista/coffee_scene_dimensions.json.
-    The pitcher carries 0.240 kg vessel mass, a 0.024 kg printed grip add-on,
-    and 0.080 kg nominal water mass = 0.344 kg.
+    The pitcher carries 0.240 kg vessel mass, a 0.0252 kg printed grip add-on,
+    and 0.080 kg nominal water mass = 0.3452 kg.
   -->
   <asset>
     <texture name="counter_checker" type="2d" builtin="checker" width="256" height="256"
@@ -27,6 +27,16 @@
 
     <default class="pitcher_visual">
       <geom material="steel" density="0" contype="0" conaffinity="0" group="2"/>
+    </default>
+
+    <!-- Structural steel handle: collidable, its mass lumped into the vessel. -->
+    <default class="pitcher_handle">
+      <geom material="steel" density="0" contype="1" conaffinity="1" group="2"/>
+    </default>
+
+    <default class="grip_addon">
+      <geom rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01" solref="0.002 1"
+            solimp="0.95 0.99 0.001"/>
     </default>
   </default>
 
@@ -115,18 +125,23 @@
       <geom name="spout_tip" class="pitcher_visual" type="capsule"
             fromto="0 0.096 0.108 0 0.125 0.110" size="0.004"/>
 
-      <geom name="handle_upper" class="pitcher_visual" type="capsule"
+      <geom name="handle_upper" class="pitcher_handle" type="capsule"
             fromto="0 -0.025 0.064 0 -0.065 0.064" size="0.005"/>
-      <geom name="handle_outer" class="pitcher_visual" type="capsule"
+      <geom name="handle_outer" class="pitcher_handle" type="capsule"
             fromto="0 -0.065 0.064 0 -0.065 0.024" size="0.005"/>
-      <geom name="handle_lower" class="pitcher_visual" type="capsule"
+      <geom name="handle_lower" class="pitcher_handle" type="capsule"
             fromto="0 -0.065 0.024 0 -0.025 0.024" size="0.005"/>
 
       <!--
-        Original 3D-printable PETG bridge: a 64 mm bridge with a 36 mm square
-        TPU-sleeved contact block over the rear handle, 48 mm end stops,
-        a lower safety shelf, and two 8 mm handle struts. Its six pieces total
-        0.024 kg and remain ordinary contact geoms.
+        Original 3D-printable PETG rear grip add-on, clamped to the collidable
+        handle: a closed four-wall collar (2 mm side walls, 4 mm top and bottom
+        jaws, 12 mm long) closes around the 10 mm upper handle rod with zero gap
+        and no penetration; an 8 mm square post rises from the collar's top jaw
+        into a lower shelf. The 64 mm bridge with its 36 mm square TPU-sleeved
+        contact block and 48 mm end stops stands on two 8 mm posts on that
+        shelf. Every piece touches the handle or a touching printed piece
+        (barista/verification/grip_attachment.py). The eleven pieces total
+        0.0252 kg and remain ordinary contact geoms.
       -->
       <geom name="top_grip_bar" type="box" pos="0 -0.075 0.115"
             quat="0.222883 0.049554 0.011345 -0.973519" size="0.020 0.018 0.018"
@@ -144,13 +159,23 @@
             size="0.024" mass="0.001" rgba="0.12 0.12 0.11 1"
             friction="2.0 0.05 0.01" solref="0.002 1" solimp="0.95 0.99 0.001"/>
       <geom name="top_grip_strut_a" type="capsule"
-            fromto="-0.017915 -0.083657 0.078 -0.017915 -0.083657 0.112969" size="0.004"
-            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"
+            fromto="-0.017915 -0.083657 0.097 -0.017915 -0.083657 0.112969" size="0.004"
+            mass="0.0015" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"
             solref="0.002 1" solimp="0.95 0.99 0.001"/>
       <geom name="top_grip_strut_b" type="capsule"
-            fromto="0.017915 -0.066343 0.078 0.017915 -0.066343 0.117031" size="0.004"
-            mass="0.0035" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"
+            fromto="0.017915 -0.066343 0.097 0.017915 -0.066343 0.117031" size="0.004"
+            mass="0.0015" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"
             solref="0.002 1" solimp="0.95 0.99 0.001"/>
+      <geom name="top_grip_handle_clamp_top" class="grip_addon" type="box"
+            pos="0 -0.052 0.071" size="0.007 0.006 0.002" mass="0.001"/>
+      <geom name="top_grip_handle_clamp_bottom" class="grip_addon" type="box"
+            pos="0 -0.052 0.057" size="0.007 0.006 0.002" mass="0.001"/>
+      <geom name="top_grip_handle_clamp_side_a" class="grip_addon" type="box"
+            pos="-0.006 -0.052 0.064" size="0.001 0.006 0.009" mass="0.0006"/>
+      <geom name="top_grip_handle_clamp_side_b" class="grip_addon" type="box"
+            pos="0.006 -0.052 0.064" size="0.001 0.006 0.009" mass="0.0006"/>
+      <geom name="top_grip_handle_post" class="grip_addon" type="box"
+            pos="0 -0.054 0.0835" size="0.004 0.004 0.0115" mass="0.002"/>
       <site name="pitcher_grip" pos="0 -0.075 0.115" size="0.006"
             rgba="0.95 0.45 0.15 1" group="4"/>
       <site name="pitcher_spout_tip" pos="0 0.129 0.110" size="0.004"
