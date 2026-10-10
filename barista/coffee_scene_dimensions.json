@@ -69,7 +69,8 @@
       "contact_solref": [0.002, 1.0],
       "contact_solimp": [0.95, 0.99, 0.001],
       "centred_over_loaded_pitcher_com_xy": false,
-      "bar_centre_xy_offset_from_loaded_com_m": 0.075,
+      "bar_centre_xy_offset_from_vessel_axis_m": 0.075,
+      "bar_centre_xy_offset_from_loaded_com_m": 0.069767,
       "simulation_behavior": "rigid part of free pitcher; ordinary contact geometry"
     },
     "nominal_water": {

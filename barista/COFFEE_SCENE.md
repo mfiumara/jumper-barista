@@ -27,7 +27,8 @@ Named sites mark the standing slot, forward direction, pitcher grip, spout tip, 
 The machine-readable source is `barista/coffee_scene_dimensions.json`. In the MJCF, the vessel
 carries 0.240 kg, the rear-handle grip bridge carries 0.024 kg, and an invisible interior cylinder
 carries 0.080 kg, so the compiled free body has the complete 0.344 kg payload mass. The grip-bar
-centre is 0.075 m behind the loaded body's centre of mass in the pitcher's XY plane; the replay
+centre is 0.075 m behind the vessel axis, 0.0698 m from the compiled loaded centre of mass in the
+pitcher's XY plane; the replay
 therefore audits the resulting offset load against the servo curve and thermal budget. The visible
 water surface and any later stream are visual approximations only. The V60 collision shell is physically present: twelve
 sloping ribs and twelve rim segments leave its centre open rather than filling the cone with
