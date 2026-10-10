@@ -15,7 +15,7 @@
     "lift_constraint": "vertical claw-mouth translation with rotation concentrated about the grip-bar axis"
   },
   "base_start": {
-    "position_m": [0.0, 0.0, 0.10647],
+    "position_m": [-0.018725, 0.095488, 0.10647],
     "yaw_rad": 0.0
   },
   "arm_joint_order": [
@@ -47,20 +47,20 @@
     {
       "phase": "lift",
       "end_s": 6.0,
-      "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043],
-      "finger_rad": 0.0
+      "arm_rad": [-0.4417058992806083, -3.056855083027532, -1.0387375723366457, -1.0831956726489285],
+      "finger_rad": 0.5
     },
     {
       "phase": "lift_settle",
       "end_s": 14.0,
-      "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043],
-      "finger_rad": 0.0
+      "arm_rad": [-0.4417058992806083, -3.056855083027532, -1.0387375723366457, -1.0831956726489285],
+      "finger_rad": 0.5
     },
     {
       "phase": "hold",
       "end_s": 17.5,
-      "arm_rad": [-0.976208, -2.349539, -0.384292, -1.019043],
-      "finger_rad": 0.0
+      "arm_rad": [-0.4417058992806083, -3.056855083027532, -1.0387375723366457, -1.0831956726489285],
+      "finger_rad": 0.5
     }
   ],
   "thresholds": {

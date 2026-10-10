@@ -43,6 +43,14 @@ def _parser() -> argparse.ArgumentParser:
             "this is not release evidence and does not replace the default verifier"
         ),
     )
+    parser.add_argument(
+        "--reachability-check",
+        action="store_true",
+        help=(
+            "with --fast-check, gate the carried approach, representative spiral and "
+            "pour-out retreat; this prerequisite does not accept final M4 stream or set-down"
+        ),
+    )
     return parser
 
 
@@ -212,6 +220,9 @@ def _summarize_torque(rows: list[dict], dt_s: float) -> dict:
             "peak_speed_rad_s": max(abs(sample["qd_pre_rad_s"]) for sample in samples),
             "peak_raw_abs_nm": max(abs(sample["tau_raw_nm"]) for sample in samples),
             "peak_applied_abs_nm": max(abs(sample["tau_applied_nm"]) for sample in samples),
+            "rms_applied_nm": math.sqrt(
+                sum(sample["tau_applied_nm"] ** 2 for sample in samples) / len(samples)
+            ),
             "minimum_curve_margin_nm": min(sample["curve_margin_nm"] for sample in samples),
             "minimum_effective_margin_nm": min(sample["effective_margin_nm"] for sample in samples),
             "maximum_thermal_theta": max(
@@ -237,6 +248,8 @@ def _json_default(value):
 
 def main() -> int:
     args = _parser().parse_args()
+    if args.reachability_check and not args.fast_check:
+        raise SystemExit("--reachability-check requires --fast-check")
     os.environ.setdefault("MUJOCO_GL", "cgl" if sys.platform == "darwin" else "egl")
 
     import imageio_ffmpeg
@@ -298,9 +311,9 @@ def main() -> int:
     runtime_joint_col = {name: index for index, name in enumerate(robot.joint_names)}
     if set(runtime_joint_col) != set(HOME):
         raise RuntimeError("barista runtime joint set differs from the 22-joint hardware order")
+    # support_base_rad is blended in from HOME during lift (4-6 s), so the initial state stays
+    # at HOME; starting at the blended end value made RF_J4 snap back at t=0.
     initial = np.asarray([HOME[name] for name in robot.joint_names], dtype=np.float64)
-    for name, value in config["support_base_rad"].items():
-        initial[runtime_joint_col[name]] = float(value)
     arm_names = config["arm_joint_order"]
     for name, value in zip(arm_names, config["keyframes"][0]["arm_rad"], strict=True):
         initial[runtime_joint_col[name]] = value
@@ -360,7 +373,7 @@ def main() -> int:
         raise RuntimeError(f"control dt {control_dt_s} differs from trajectory dt")
     full_duration_s = float(config["keyframes"][-1]["end_s"])
     duration_s = (
-        next(
+        max(
             float(frame["end_s"])
             for frame in config["keyframes"]
             if frame["phase"] == FAST_CHECK_END_PHASE
@@ -778,6 +791,10 @@ def main() -> int:
     pour_rows = [row for row in motion_rows if row["phase"] == "spiral"]
     carried_phases = {"transit", "pour_in", "spiral", "pour_out", "return"}
     carried_rows = [row for row in motion_rows if row["phase"] in carried_phases]
+    reachability_phases = {"transit", "pour_in", "spiral", "pour_out"}
+    reachability_rows = [
+        row for row in motion_rows if row["phase"] in reachability_phases
+    ]
     final_rows = [row for row in motion_rows if row["phase"] == "final_settle"]
     retreat_rows = [
         row for row in motion_rows if row["phase"] in ("clear_retreat", "retreat")
@@ -933,6 +950,60 @@ def main() -> int:
         ),
         "no_emission_after_pour_out": True,
     }
+    reachability_checks = {
+        "physical_pickup_and_hold": (
+            valid_hold_duration >= float(threshold["m3_hold_s"])
+            and fixed_before_lift
+            and moving_before_lift
+        ),
+        "actual_spout_duration": 15.0 <= len(pour_rows) * dt_s <= 25.0,
+        "actual_spout_turn_count": 3.0 <= turns <= 4.0,
+        "actual_spout_radius": float(np.max(radii)) <= 0.033,
+        "actual_spout_height": 0.020 <= spout_min and spout_max <= 0.050,
+        "opposing_jaw_contacts": all(
+            row["fixed_jaw_contact"] and row["moving_jaw_contact"]
+            for row in reachability_rows
+        ),
+        "carried_grasp_rotation": max(
+            row["grasp_rotation_deg"] for row in reachability_rows
+        ) <= threshold["carried_grasp_rotation_deg"],
+        "no_forbidden_contacts": not any(
+            row["counter_contact"]
+            or row["brewer_contact"]
+            or row["robot_brewer_contact"]
+            or row["non_claw_robot_contact"]
+            or row["self_contact"]
+            or row["joint_limit_violation"]
+            for row in reachability_rows
+        ),
+        "nonnegative_brewer_clearance": min(
+            row["brewer_clearance_m"] for row in reachability_rows
+        ) >= 0.0,
+        "support_stable": min(
+            row["support_foot_contacts"] for row in reachability_rows
+        ) >= 4,
+        "base_stable": (
+            max(row["base_xy_drift_m"] for row in reachability_rows)
+            <= threshold["base_xy_drift_m"]
+            and max(
+                max(abs(row["base_roll_deg"]), abs(row["base_pitch_deg"]))
+                for row in reachability_rows
+            ) <= threshold["base_roll_pitch_deg"]
+        ),
+        "torque_speed_thermal": torque_pass,
+    }
+    # Reported, not gated here: the full M4 verifier gates this, and it is not one of the
+    # reachability acceptance criteria. Keeping it visible stops it being lost before M4.
+    reachability_carried_translation = max(
+        row["grasp_translation_m"] for row in reachability_rows
+    )
+    reachability_full_m4_risks = {
+        "carried_grasp_translation_m": reachability_carried_translation,
+        "full_m4_threshold_m": threshold["grasp_translation_m"],
+        "within_full_m4_threshold": (
+            reachability_carried_translation <= threshold["grasp_translation_m"]
+        ),
+    }
 
     payload = _payload(model, mujoco, pitcher_body)
     qpos_array = np.asarray(render_states)
@@ -955,10 +1026,15 @@ def main() -> int:
     summary = {
         "simulation_only": True,
         "evidence_class": (
-            "diagnostic_non_release_fast_check" if args.fast_check else "full_m4_verification"
+            "m4_reachability_prerequisite_fast_check"
+            if args.reachability_check
+            else "diagnostic_non_release_fast_check"
+            if args.fast_check
+            else "full_m4_verification"
         ),
         "release_evidence": not args.fast_check,
         "fast_check": args.fast_check,
+        "reachability_check": args.reachability_check,
         "fast_check_notice": (
             "NON-RELEASE DIAGNOSTIC: nominal 5 ms physics bounded at pour_out; "
             "run the default verifier for M4 release evidence"
@@ -1054,6 +1130,25 @@ def main() -> int:
             "landing_miss_count": len(misses), "landing_success_rate": landing_success_rate,
             "misses": misses, "checks": stream_passes,
         },
+        "reachability": {
+            "scope_phases": sorted(reachability_phases),
+            "minimum_brewer_clearance_m": min(
+                row["brewer_clearance_m"] for row in reachability_rows
+            ),
+            "minimum_support_contacts": min(
+                row["support_foot_contacts"] for row in reachability_rows
+            ),
+            "maximum_base_xy_drift_m": max(
+                row["base_xy_drift_m"] for row in reachability_rows
+            ),
+            "maximum_base_abs_roll_pitch_deg": max(
+                max(abs(row["base_roll_deg"]), abs(row["base_pitch_deg"]))
+                for row in reachability_rows
+            ),
+            "checks": reachability_checks,
+            "full_m4_open_risks": reachability_full_m4_risks,
+            "passes": payload["passes"] and all(reachability_checks.values()),
+        },
         "torque": {
             "units": {"q": "rad", "qd": "rad/s", "tau": "N m", "time": "s"},
             "row_count": len(torque_rows), "rows_per_substep": len(joint_order),
@@ -1080,6 +1175,17 @@ def main() -> int:
     summary_path.write_text(json.dumps(summary, indent=2, default=_json_default) + "\n", "utf-8")
     if args.fast_check:
         print("[m4] NON-RELEASE DIAGNOSTIC FAST CHECK (bounded at pour_out; no render)")
+    if args.reachability_check:
+        print(
+            "[m4] reachability prerequisite pass="
+            f"{summary['reachability']['passes']} (not final M4 acceptance)"
+        )
+        if not reachability_full_m4_risks["within_full_m4_threshold"]:
+            print(
+                "[m4] WARNING full-M4 risk: carried grasp translation="
+                f"{reachability_carried_translation:.6f} m exceeds "
+                f"{threshold['grasp_translation_m']:.3f} m (reported, not gated here)"
+            )
     print(f"[m4] actual-spout turns={turns:.6f}; radial progress={radial_progress:.6f} m; "
           f"landing={landing_success_rate:.3%} ({len(misses)} misses)")
     print(f"[m4] spout height={spout_min:.6f}..{spout_max:.6f} m; "
@@ -1094,7 +1200,12 @@ def main() -> int:
     if render_enabled:
         for path in (video, spiral_frame, set_down_frame):
             print(f"[m4] artifact: {path}")
-    return 0 if summary["passes"] else 1
+    checked_pass = (
+        summary["reachability"]["passes"]
+        if args.reachability_check
+        else summary["passes"]
+    )
+    return 0 if checked_pass else 1
 
 
 if __name__ == "__main__":

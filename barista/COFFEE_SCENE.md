@@ -4,12 +4,13 @@
 MJCF primitive geometry and built-in textures; there are no downloaded meshes, textures, or
 other third-party scene assets.
 
-The counter surface is the local `z = 0` datum. Jumper's standing slot is centred at the origin
-and faces `+X`. The free pitcher starts at `(0.18698, 0.02047, 0.001)` m so the carried claw can
-approach it. The V60 is fixed into the server at `(0.0934, 0.1811)` m, inside the measured
-carried-arm workspace; replay checks gate physical robot/brewer contact and pitcher clearance throughout
-the pour. Named sites mark the standing slot, forward direction, centred pitcher grip, spout tip,
-and coffee-bed target.
+The counter surface is the local `z = 0` datum. The package attachment slot remains centred at
+the origin and faces `+X`; the reachability replay starts Jumper at `(-0.018725, 0.095488)` m.
+The free pitcher starts at
+`(0.168255, 0.190982, 0.001)` m so the carried claw can approach the rear-handle grip. The V60 is
+fixed into the server at `(0.0934, 0.32)` m. The nominal 0.50 m standing marker overlaps that
+fixed-prop envelope, so the collidable native:cpu replay—not the marker—is the clearance authority.
+Named sites mark the standing slot, forward direction, pitcher grip, spout tip, and coffee-bed target.
 
 ## Dimensions and design masses
 
@@ -19,16 +20,16 @@ and coffee-bed target.
 | Cup/server | 0.090 m diameter × 0.080 m high | 0.250 kg | Static |
 | V60 | 0.076 m maximum diameter × 0.090 m high; 0.024 m outlet | 0.120 kg | Static open 12-rib cone, segmented rim, and support plate on server |
 | Pitcher vessel | 0.056 m body diameter × 0.080 m high; 0.129 m spout reach | 0.240 kg | Free rigid body |
-| Centred top-grip add-on | 0.064 m bridge; 0.036 m square TPU sleeve, 0.048 m end stops, lower shelf, and two 0.008 m struts | 0.024 kg | Hollow 3D-printed PETG bridge; ordinary contact geometry |
+| Rear-handle grip add-on | 0.064 m bridge; 0.036 m square TPU sleeve, 0.048 m end stops, lower shelf, and two 0.008 m struts | 0.024 kg | Hollow 3D-printed PETG bridge; ordinary contact geometry |
 | Nominal water | 80 mL at 1000 kg/m³ | 0.080 kg | Rigid interior mass proxy; not fluid |
 | Pitcher + add-on + nominal water | — | **0.344 kg** | 0.106 kg below the 0.450 kg design limit |
 
 The machine-readable source is `barista/coffee_scene_dimensions.json`. In the MJCF, the vessel
-carries 0.240 kg, the symmetric grip bridge carries 0.024 kg, and an invisible interior cylinder
+carries 0.240 kg, the rear-handle grip bridge carries 0.024 kg, and an invisible interior cylinder
 carries 0.080 kg, so the compiled free body has the complete 0.344 kg payload mass. The grip-bar
-centre is directly over the loaded body's centre of mass in the pitcher's XY plane, allowing the
-pitcher to hang level while the claw pinches the bar ends. The visible water surface and any later
-stream are visual approximations only. The V60 collision shell is physically present: twelve
+centre is 0.075 m behind the loaded body's centre of mass in the pitcher's XY plane; the replay
+therefore audits the resulting offset load against the servo curve and thermal budget. The visible
+water surface and any later stream are visual approximations only. The V60 collision shell is physically present: twelve
 sloping ribs and twelve rim segments leave its centre open rather than filling the cone with
 stacked cylinders. This scene does not represent a physical-robot trial.
 

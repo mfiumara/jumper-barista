@@ -42,7 +42,7 @@
     <geom name="counter_back" class="fixed_prop" type="box" pos="0 0.39 0.055"
           size="0.60 0.01 0.055" material="counter_mat"/>
 
-    <!-- Clear standing slot: 0.50 m diameter, centred at the package spawn. -->
+    <!-- Package attachment datum; replayed collision clearance is authoritative. -->
     <site name="jumper_standing_slot" pos="0 0 0.002" type="cylinder"
           size="0.25 0.001" rgba="0.25 0.65 0.42 0.12" group="4"/>
     <site name="jumper_forward" pos="0.20 0 0.002" type="sphere"
@@ -99,7 +99,7 @@
       carries the 0.240 kg dry mass. An invisible interior cylinder carries the
       0.080 kg nominal water mass; this is a rigid mass proxy, not simulated fluid.
     -->
-    <body name="pitcher" pos="0.18698 0.02047 0.001">
+    <body name="pitcher" pos="0.168255 0.190982 0.001">
       <freejoint name="pitcher_free"/>
       <geom name="pitcher_body" type="cylinder" pos="0 0 0.040" size="0.028 0.040"
             mass="0.240" material="steel" friction="0.9 0.01 0.001"/>
@@ -124,34 +124,34 @@
 
       <!--
         Original 3D-printable PETG bridge: a 64 mm bridge with a 36 mm square
-        TPU-sleeved contact block over the loaded centre of mass, 48 mm end stops,
-        a lower safety shelf, and two 8 mm rim-clamp struts. Its six symmetric
-        pieces total 0.024 kg and remain ordinary contact geoms.
+        TPU-sleeved contact block over the rear handle, 48 mm end stops,
+        a lower safety shelf, and two 8 mm handle struts. Its six pieces total
+        0.024 kg and remain ordinary contact geoms.
       -->
-      <geom name="top_grip_bar" type="box" pos="0 0 0.115"
+      <geom name="top_grip_bar" type="box" pos="0 -0.075 0.115"
             quat="0.222883 0.049554 0.011345 -0.973519" size="0.020 0.018 0.018"
             mass="0.012" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"
             solref="0.002 1" solimp="0.95 0.99 0.001"/>
-      <geom name="top_grip_safety_shelf" type="box" pos="0 0 0.097"
+      <geom name="top_grip_safety_shelf" type="box" pos="0 -0.075 0.097"
             size="0.032 0.032 0.003" mass="0.003" rgba="0.12 0.12 0.11 1"
             friction="2.0 0.05 0.01" solref="0.002 1" solimp="0.95 0.99 0.001"/>
       <geom name="top_grip_collar_a" type="cylinder"
-            fromto="-0.018811 -0.009090 0.112867 -0.017019 -0.008224 0.113071"
+            fromto="-0.018811 -0.084090 0.112867 -0.017019 -0.083224 0.113071"
             size="0.024" mass="0.001" rgba="0.12 0.12 0.11 1"
             friction="2.0 0.05 0.01" solref="0.002 1" solimp="0.95 0.99 0.001"/>
       <geom name="top_grip_collar_b" type="cylinder"
-            fromto="0.017019 0.008224 0.116929 0.018811 0.009090 0.117133"
+            fromto="0.017019 -0.066776 0.116929 0.018811 -0.065910 0.117133"
             size="0.024" mass="0.001" rgba="0.12 0.12 0.11 1"
             friction="2.0 0.05 0.01" solref="0.002 1" solimp="0.95 0.99 0.001"/>
       <geom name="top_grip_strut_a" type="capsule"
-            fromto="-0.017915 -0.008657 0.078 -0.017915 -0.008657 0.112969" size="0.004"
+            fromto="-0.017915 -0.083657 0.078 -0.017915 -0.083657 0.112969" size="0.004"
             mass="0.0035" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"
             solref="0.002 1" solimp="0.95 0.99 0.001"/>
       <geom name="top_grip_strut_b" type="capsule"
-            fromto="0.017915 0.008657 0.078 0.017915 0.008657 0.117031" size="0.004"
+            fromto="0.017915 -0.066343 0.078 0.017915 -0.066343 0.117031" size="0.004"
             mass="0.0035" rgba="0.12 0.12 0.11 1" friction="2.0 0.05 0.01"
             solref="0.002 1" solimp="0.95 0.99 0.001"/>
-      <site name="pitcher_grip" pos="0 0 0.115" size="0.006"
+      <site name="pitcher_grip" pos="0 -0.075 0.115" size="0.006"
             rgba="0.95 0.45 0.15 1" group="4"/>
       <site name="pitcher_spout_tip" pos="0 0.129 0.110" size="0.004"
             rgba="0.20 0.48 0.62 1" group="4"/>

@@ -46,17 +46,17 @@
       "base_vessel_mass_kg": 0.24,
       "dry_mass_kg": 0.264,
       "simulation_behavior": "free rigid body",
-      "initial_position_m": [0.18698, 0.02047, 0.001]
+      "initial_position_m": [0.168255, 0.190982, 0.001]
     },
     "pitcher_top_grip_addon": {
       "material": "PETG structure with a high-grip TPU contact sleeve",
-      "manufacturing": "single 3D-printed bridge with two end stops, two rim-clamp struts, and a TPU contact sleeve",
+      "manufacturing": "single 3D-printed bridge clamped over the rear handle with two end stops, two handle struts, and a TPU contact sleeve",
       "bar_centreline_length_m": 0.04,
       "bar_overall_length_m": 0.064,
       "bar_cross_section_m": [0.036, 0.036],
       "end_stop_collar_diameter_m": 0.048,
       "safety_shelf_dimensions_m": [0.064, 0.064, 0.006],
-      "bar_centre_m": [0.0, 0.0, 0.115],
+      "bar_centre_m": [0.0, -0.075, 0.115],
       "bar_axis_body": [-0.895735, -0.432837, -0.101541],
       "strut_length_m": 0.0371,
       "strut_diameter_m": 0.008,
@@ -68,7 +68,8 @@
       "contact_friction": [2.0, 0.05, 0.01],
       "contact_solref": [0.002, 1.0],
       "contact_solimp": [0.95, 0.99, 0.001],
-      "centred_over_loaded_pitcher_com_xy": true,
+      "centred_over_loaded_pitcher_com_xy": false,
+      "bar_centre_xy_offset_from_loaded_com_m": 0.075,
       "simulation_behavior": "rigid part of free pitcher; ordinary contact geometry"
     },
     "nominal_water": {
@@ -96,5 +97,12 @@
     "nearest_fixed_prop_surface_distance_m": 0.288352,
     "fixed_prop_clear_boundary_margin_m": 0.038352,
     "free_pitcher_is_inside_marked_boundary": true
+  },
+  "reachability_layout": {
+    "robot_base_position_m": [-0.018725, 0.095488, 0.0],
+    "nearest_fixed_prop_centre_distance_m": 0.2509534892544832,
+    "nearest_fixed_prop_surface_distance_m": 0.2059534892544832,
+    "nominal_slot_boundary_margin_m": -0.0440465107455168,
+    "clearance_validation": "the collidable native:cpu replay is authoritative"
   }
 }

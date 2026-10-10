@@ -80,8 +80,8 @@
       "body": "pitcher",
       "freeJoint": true,
       "position": [
-        0.18698,
-        0.02047,
+        0.168255,
+        0.190982,
         0.001
       ],
       "geoms": [
@@ -118,8 +118,8 @@
   },
   "files": {
     "scene.xml": {
-      "bytes": 11699,
-      "sha256": "cb25b2ee60d36769c512373c8e2cd4992bceeada19ed10def647bc75bc17c666"
+      "bytes": 11702,
+      "sha256": "332a8fe241bb74cded4728d910bb7ec6c2e0a2ef3762ffec689a0891b9b2fc7d"
     }
   }
 }
