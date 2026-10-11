@@ -21,7 +21,7 @@ REPO = Path(__file__).resolve().parents[2]
 TRAJECTORY = REPO / "barista" / "trajectory" / "m4_spiral_pour.json"
 DIMENSIONS = REPO / "barista" / "coffee_scene_dimensions.json"
 WIDTH, HEIGHT = 960, 540
-CONTROL_DECIMATION = 4
+CONTROL_DECIMATION = 20  # 1 kHz physics, 50 Hz targets; derived from the trajectory at run time
 FAST_CHECK_END_PHASE = "pour_out"
 
 
@@ -59,6 +59,18 @@ def _parser() -> argparse.ArgumentParser:
             "pour-out retreat; this prerequisite does not accept final M4 stream or set-down"
         ),
     )
+    parser.add_argument(
+        "--spawn-offset",
+        type=float,
+        nargs=3,
+        default=(0.0, 0.0, 0.0),
+        metavar=("DX_M", "DY_M", "DYAW_DEG"),
+        help=(
+            "robustness sweep: spawn the robot rigidly offset from the trajectory's "
+            "base_start (world x/y in metres, yaw in degrees); the scene and every gate "
+            "stay unchanged"
+        ),
+    )
     return parser
 
 
@@ -85,14 +97,26 @@ def _name(model, mujoco, kind, index: int) -> str:
 CLEARANCE_CONFIRM_DISTMAX_M = (0.003, 0.01, 0.05, 0.1, 0.5, 1.0)
 
 
-def _geom_clearance(mujoco, model, data, geom1: int, geom2: int, fromto) -> tuple[float, float]:
+# The pitcher-to-robot clearance (reported, not gated) confirms on a 0.5 mm ladder instead:
+# a reading capped at distmax d means "at least d", so a coarse ladder would report a
+# spurious solver zero near the head as exactly 3 or 10 mm. The fine ladder keeps the
+# reading a lower bound while resolving it to 0.5 mm.
+PITCHER_ROBOT_CONFIRM_DISTMAX_M = tuple(
+    round(0.0005 * step, 4) for step in range(1, 101)
+) + (0.1, 0.5, 1.0)
+
+
+def _geom_clearance(
+    mujoco, model, data, geom1: int, geom2: int, fromto,
+    confirm: tuple[float, ...] = CLEARANCE_CONFIRM_DISTMAX_M,
+) -> tuple[float, float]:
     """Return (confirmed, raw) signed distance between two geoms."""
     raw = float(mujoco.mj_geomDistance(model, data, geom1, geom2, 1.0, fromto))
     if raw > 0.0:
         return raw, raw
     confirmed = max(
         float(mujoco.mj_geomDistance(model, data, geom1, geom2, distmax, fromto))
-        for distmax in CLEARANCE_CONFIRM_DISTMAX_M
+        for distmax in confirm
     )
     return confirmed, raw
 
@@ -115,6 +139,11 @@ STREAM_PATH_POINTS = 13
 FREE_LEG_PREFIX = "robot/LF_"
 # Upright set-down: the released pitcher must stand within this tilt of its settled pose.
 UPRIGHT_SET_DOWN_TILT_DEG = 5.0
+# Pitcher-to-robot clearance (reported): the claw that holds the pitcher is excluded, and
+# so are the pitcher's internal water proxies, which sit inside its body.
+CLAW_PREFIXES = ("robot/LF_palm", "robot/LF_finger")
+PITCHER_INTERNAL_GEOMS = ("nominal_water_mass", "water_surface")
+CARRIED_PHASES = ("transit", "pour_in", "spiral", "pour_out", "return")
 
 
 def _filter_compatible(model, geom1: int, geom2: int) -> bool:
@@ -182,7 +211,8 @@ def _collision_integrity(model, mujoco, robot_geoms, brewer_geoms, pitcher_geoms
 
 
 def _set_clearance(
-    mujoco, model, data, set_a: np.ndarray, set_b: np.ndarray, fromto
+    mujoco, model, data, set_a: np.ndarray, set_b: np.ndarray, fromto,
+    confirm: tuple[float, ...] = CLEARANCE_CONFIRM_DISTMAX_M,
 ) -> tuple[float, int, int]:
     """Lower-bound-safe minimum signed distance between two geom sets.
 
@@ -197,7 +227,7 @@ def _set_clearance(
     best, best_a, best_b = math.inf, -1, -1
     for row, col in zip(*np.nonzero(gap <= CLEARANCE_PREFILTER_M), strict=True):
         confirmed, _ = _geom_clearance(
-            mujoco, model, data, int(set_a[row]), int(set_b[col]), fromto
+            mujoco, model, data, int(set_a[row]), int(set_b[col]), fromto, confirm
         )
         if confirmed < best:
             best, best_a, best_b = confirmed, int(set_a[row]), int(set_b[col])
@@ -264,6 +294,80 @@ def _blend_from(config: dict, time_s: float, start_arm: np.ndarray) -> np.ndarra
             return start_arm + (arm - start_arm) * fraction
         previous_time = end
     return np.asarray(config["keyframes"][-1]["arm_rad"], dtype=np.float64)
+
+
+def _segment_fraction(config: dict, time_s: float) -> float:
+    """Smoothed progress through the keyframe segment containing ``time_s``."""
+    previous_time = 0.0
+    for keyframe in config["keyframes"]:
+        end = float(keyframe["end_s"])
+        if time_s <= end:
+            return _smooth((time_s - previous_time) / max(end - previous_time, 1e-12))
+        previous_time = end
+    return 1.0
+
+
+def _key_frame_times(config: dict, frames: tuple[Path, Path, Path, Path]) -> list:
+    """Still times from the keyframe phases: start, mid-spiral, outer spiral, set-down."""
+    def span(phase: str) -> tuple[float, float]:
+        previous, start, end = 0.0, None, None
+        for keyframe in config["keyframes"]:
+            if keyframe["phase"] == phase:
+                start = previous if start is None else start
+                end = float(keyframe["end_s"])
+            previous = float(keyframe["end_s"])
+        if start is None or end is None:
+            raise RuntimeError(f"trajectory has no {phase!r} phase")
+        return start, end
+
+    spiral_start, spiral_end = span("spiral")
+    settle_start, settle_end = span("final_settle")
+    times = (
+        0.5, 0.5 * (spiral_start + spiral_end), spiral_end - 3.0,
+        min(settle_start + 1.0, settle_end - 0.1),
+    )
+    return list(zip(times, frames, strict=True))
+
+
+def _load_sibling(stem: str):
+    """Import a module next to this file by path (``barista/`` is not on ``sys.path``)."""
+    import importlib.util
+
+    name = f"barista_verification_{stem}"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(f"{stem}.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+def _apply_grip_contact(models: list, mujoco, spec: dict | None) -> dict | None:
+    """Optional grip-contact impedance from the trajectory (see its ``grip_contact`` note).
+
+    Only the named pitcher grip geoms change, and only ``solimp`` (how hard the contact
+    is) and ``solmix`` (whose impedance a contact pair uses): no friction coefficient, no
+    gate. Returns what was applied, for the summary.
+    """
+    if not spec:
+        return None
+    solimp = [float(value) for value in spec["solimp"]]
+    solmix = float(spec.get("solmix", 1.0))
+    applied = {}
+    for suffix in spec["geoms"]:
+        index = _ending(models[0], mujoco, mujoco.mjtObj.mjOBJ_GEOM, "ngeom", suffix)
+        applied[suffix] = {
+            "solimp_before": models[0].geom_solimp[index].tolist(),
+            "solmix_before": float(models[0].geom_solmix[index]),
+        }
+        for model in models:
+            # solimp is (dmin, dmax, width, midpoint, power); unspecified tail values stay.
+            model.geom_solimp[index, : len(solimp)] = solimp
+            model.geom_solmix[index] = solmix
+    return {
+        "solimp": solimp, "solmix": solmix, "geoms": applied, "model_copies": len(models),
+        "note": spec.get("note", ""),
+    }
 
 
 def _rotation_angle_deg(rotation: np.ndarray) -> float:
@@ -401,6 +505,117 @@ def _summarize_torque(rows: list[dict], dt_s: float) -> dict:
     return out
 
 
+def _pitcher_robot_clearance_summary(rows: list[dict]) -> dict:
+    """Minimum carried pitcher-to-robot (non-claw) clearance, overall and per phase.
+
+    Reported, not gated: the gate for actual contact is
+    ``no_brewer_or_carried_forbidden_contact``. This is the margin before that gate trips.
+    """
+    out: dict[str, dict] = {}
+    for scope in ("carried", *CARRIED_PHASES):
+        scoped = [
+            row for row in rows
+            if row["phase"] in CARRIED_PHASES and scope in ("carried", row["phase"])
+        ]
+        if not scoped:
+            continue
+        nearest = min(scoped, key=lambda row: row["pitcher_robot_clearance_m"])
+        out[scope] = {
+            "minimum_m": nearest["pitcher_robot_clearance_m"],
+            "nearest_pair": nearest["pitcher_robot_nearest_pair"],
+            "time_s": nearest["time_s"],
+        }
+    return {
+        "note": (
+            "carried pitcher geoms incl. the visual spout (not the internal water proxies) "
+            "vs every robot collision geom except the LF claw (LF_palm*, LF_finger*)"
+        ),
+        "by_scope": out,
+    }
+
+
+class _TorqueLog:
+    """Streams the per-substep torque audit to CSV and keeps only its running summary.
+
+    At 1 kHz physics the audit is 22 rows per substep (about 1.25 M rows for the full M4
+    replay); held as dicts that is several GB per process, which made parallel sweeps
+    thrash. The CSV bytes and the summary are exactly those of writing every row at the end
+    and calling :func:`_summarize_torque` on them (same order, same arithmetic).
+    """
+
+    def __init__(self, path: Path, dt_s: float) -> None:
+        self.path = path
+        self.dt_s = dt_s
+        self.handle = path.open("w", newline="", encoding="utf-8")
+        self.writer: csv.DictWriter | None = None
+        self.count = 0
+        self.groups: dict[tuple[str, str], dict] = {}
+
+    def add(self, row: dict) -> None:
+        if self.writer is None:
+            self.writer = csv.DictWriter(self.handle, fieldnames=list(row))
+            self.writer.writeheader()
+        self.writer.writerow(row)
+        self.count += 1
+        for key in ((row["joint"], "whole_run"), (row["joint"], row["phase"])):
+            group = self.groups.get(key)
+            if group is None:
+                group = self.groups[key] = {
+                    "n": 0, "speed": -math.inf, "raw": -math.inf, "applied": -math.inf,
+                    "squares": [], "curve": math.inf, "effective": math.inf,
+                    "theta": -math.inf, "above": 0, "streak": 0, "longest": 0, "derated": 0,
+                    "first_violation": None, "thermal_error": -math.inf,
+                }
+            group["n"] += 1
+            group["speed"] = max(group["speed"], abs(row["qd_pre_rad_s"]))
+            group["raw"] = max(group["raw"], abs(row["tau_raw_nm"]))
+            group["applied"] = max(group["applied"], abs(row["tau_applied_nm"]))
+            # Kept as floats and summed once with sum(), whose (compensated) result is the
+            # one _summarize_torque reports.
+            group["squares"].append(row["tau_applied_nm"] ** 2)
+            group["curve"] = min(group["curve"], row["curve_margin_nm"])
+            group["effective"] = min(group["effective"], row["effective_margin_nm"])
+            group["theta"] = max(
+                group["theta"], max(row["thermal_theta_pre"], row["thermal_theta_post"])
+            )
+            if row["above_continuous"]:
+                group["above"] += 1
+                group["streak"] += 1
+                group["longest"] = max(group["longest"], group["streak"])
+            else:
+                group["streak"] = 0
+            group["derated"] += row["derating_active"]
+            if row["curve_violation"] and group["first_violation"] is None:
+                group["first_violation"] = row["time_s"]
+            group["thermal_error"] = max(group["thermal_error"], row["thermal_recompute_error"])
+
+    def close(self) -> None:
+        self.handle.close()
+
+    def summary(self) -> dict:
+        out: dict[str, dict] = {}
+        for (joint, phase), group in self.groups.items():
+            out[f"{joint}:{phase}"] = {
+                "joint": joint,
+                "phase": phase,
+                "sample_count": group["n"],
+                "peak_speed_rad_s": group["speed"],
+                "peak_raw_abs_nm": group["raw"],
+                "peak_applied_abs_nm": group["applied"],
+                "rms_applied_nm": math.sqrt(sum(group["squares"]) / group["n"]),
+                "minimum_curve_margin_nm": group["curve"],
+                "minimum_effective_margin_nm": group["effective"],
+                "maximum_thermal_theta": group["theta"],
+                "above_continuous_count": group["above"],
+                "above_continuous_total_s": group["above"] * self.dt_s,
+                "above_continuous_max_contiguous_s": group["longest"] * self.dt_s,
+                "derated_substep_count": group["derated"],
+                "first_violation_time_s": group["first_violation"],
+                "maximum_thermal_recompute_error": group["thermal_error"],
+            }
+        return out
+
+
 def _json_default(value):
     """Turn NumPy scalar reductions into ordinary JSON scalar values."""
     if isinstance(value, np.generic):
@@ -443,6 +658,9 @@ def main() -> int:
 
     env_cfg = tasks.load_env_cfg("jumper.barista", play=True)
     env_cfg.seed = seed
+    # The physics rate is the trajectory's: M4 runs at 1 kHz physics with 50 Hz keyframe
+    # targets so it chains with the 1 kHz locomotion policies (MOTION_CHAIN.md R3).
+    env_cfg.sim.mujoco.timestep = float(config["physics_dt_s"])
     scenes.apply(env_cfg, "coffee_bar")
     env_cfg.scene.num_envs = 1
     env = ManagerBasedRlEnv(cfg=env_cfg, device=resolution.device)
@@ -452,6 +670,11 @@ def main() -> int:
     model.opt.impratio = PROP_IMPRATIO
     if PROP_CONE != "elliptic":
         raise RuntimeError(f"expected the measured grasp cone to be elliptic, got {PROP_CONE}")
+    # The native backend steps per-environment model copies when domain randomisation is
+    # on, so a model edit has to reach those copies too.
+    grip_contact = _apply_grip_contact(
+        [model, *(getattr(env.sim, "_models", None) or [])], mujoco, config.get("grip_contact")
+    )
     robot = env.scene["robot"]
     if len(robot.actuators) != 1 or not isinstance(
         robot.actuators[0], AuditedServoCurveActuator
@@ -464,9 +687,15 @@ def main() -> int:
         for name in HOME
     }
     base_start = config["base_start"]
-    yaw = float(base_start["yaw_rad"])
+    spawn_dx, spawn_dy, spawn_dyaw_deg = (float(value) for value in args.spawn_offset)
+    yaw = float(base_start["yaw_rad"]) + math.radians(spawn_dyaw_deg)
+    spawn_position = [
+        float(base_start["position_m"][0]) + spawn_dx,
+        float(base_start["position_m"][1]) + spawn_dy,
+        float(base_start["position_m"][2]),
+    ]
     root_pose = torch.tensor(
-        [[*base_start["position_m"], math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)]],
+        [[*spawn_position, math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)]],
         dtype=torch.float,
         device=resolution.device,
     )
@@ -489,6 +718,24 @@ def main() -> int:
     # Native refresh restores environment 0 into this MjData after every step. It
     # is the registered runtime's state, not a separate probe data object.
     data = env.sim._datas[0]
+    # A robot spawned (or arrived) off base_start has its keyframes re-targeted by IK so the
+    # pour stays in the brew station's frame; exactly at base_start nothing changes.
+    retarget = _load_sibling("m4_retarget").StanceRetarget(
+        model, mujoco, base_start, config.get("set_down_servo"),
+        config.get("spiral_radius_scale"),
+    )
+    retarget.measure(data)
+    if retarget.active:
+        corrected = retarget.correct(
+            data, config["keyframes"][0]["phase"], config["keyframes"][0]["arm_rad"]
+        )
+        for name, value in zip(arm_names, corrected, strict=True):
+            initial[runtime_joint_col[name]] = value
+        initial_t = torch.tensor(initial[None, :], dtype=torch.float, device=resolution.device)
+        robot.write_joint_state_to_sim(initial_t, torch.zeros_like(initial_t))
+        robot.set_joint_position_target(initial_t)
+        env.sim.forward()
+        env.scene.update(dt=0.0)
 
     joint_order = list(HOME)
     joint_col = {name: index for index, name in enumerate(joint_order)}
@@ -534,12 +781,25 @@ def main() -> int:
     )
     robot_geom_array = np.asarray(robot_collision_geoms, dtype=np.int64)
     brewer_geom_array = np.asarray(sorted(brewer_geoms), dtype=np.int64)
+    # Reported (not gated) clearance between the carried pitcher, including its visual
+    # spout, and every robot collision geom that is not the claw holding it: the
+    # display_module/head, the trunk, the support legs and the LF arm links.
+    pitcher_shape_array = np.asarray(sorted(
+        index for index in pitcher_geoms
+        if not _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index).endswith(
+            PITCHER_INTERNAL_GEOMS
+        )
+    ), dtype=np.int64)
+    robot_nonclaw_array = np.asarray([
+        index for index in robot_collision_geoms
+        if not _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index).startswith(CLAW_PREFIXES)
+    ], dtype=np.int64)
 
     nominal_dt_s = float(config["physics_dt_s"])
     dt_s = float(model.opt.timestep)
     if abs(dt_s - nominal_dt_s) > 1e-12:
         raise RuntimeError(f"compiled dt {dt_s} differs from trajectory dt")
-    control_decimation = CONTROL_DECIMATION
+    control_decimation = round(float(config["control_dt_s"]) / dt_s)
     control_dt_s = dt_s * control_decimation
     if abs(control_dt_s - float(config["control_dt_s"])) > 1e-12:
         raise RuntimeError(f"control dt {control_dt_s} differs from trajectory dt")
@@ -557,7 +817,7 @@ def main() -> int:
     if render_stride * dt_s * float(config["render_fps"]) != 1.0:
         raise RuntimeError("render rate must divide the physics rate exactly")
 
-    torque_rows: list[dict] = []
+    torque_log = _TorqueLog(out / "torque_substeps.csv", dt_s)
     motion_rows: list[dict] = []
     stream_rows: list[dict] = []
     render_states: list[np.ndarray] = []
@@ -575,6 +835,10 @@ def main() -> int:
     grasp_reference = None
     carried_reference_set = False
     config_sha256 = hashlib.sha256(trajectory.read_bytes()).hexdigest()
+    # Grip preload: the claw's squeeze lead (the servo pushes with stiffness x lead once the
+    # finger is stopped by the pitcher). The trajectory may raise it within the servo's
+    # continuous rating; the torque audit below still gates every substep.
+    squeeze_lead = float(config.get("grip_squeeze_lead_rad", SQUEEZE_LEAD))
     stream_cfg = config["stream"]
     bed_centre = np.asarray(stream_cfg["bed_centre_m"], dtype=np.float64)
     # A landing is accepted only inside the acceptance radius less the required edge margin.
@@ -592,15 +856,22 @@ def main() -> int:
         for step in range(steps):
             time_s = step * dt_s
             phase, _, _ = _target(config, time_s)
+            if step % round(5.0 / dt_s) == 0:
+                print(f"[m4] t={time_s:.0f} s ({phase})", flush=True)
             if step % control_decimation == 0:
                 _, arm, finger_request = _target(config, time_s)
+                keyframe_arm = arm
+                arm = retarget.correct(data, phase, keyframe_arm, time_s)
                 if set_down_contact_seen and phase in ("lower", "set_down", "release"):
                     assert set_down_arm is not None
                     arm = set_down_arm
                     finger_request = -1.4
                 elif set_down_contact_seen and phase == "clear_retreat":
                     assert set_down_arm is not None
-                    arm = _blend_from(config, time_s, set_down_arm)
+                    # Blend from the held contact arm toward the re-targeted keyframe.
+                    arm = _blend_from(config, time_s, set_down_arm) + (
+                        arm - keyframe_arm
+                    ) * _segment_fraction(config, time_s)
                 target[:] = [HOME[name] for name in joint_order]
                 base_fraction = _smooth((time_s - 4.0) / 2.0)
                 support_base = dict(HOME)
@@ -639,7 +910,7 @@ def main() -> int:
                 if finger_request > finger_q:
                     target[finger_col] = min(
                         finger_request,
-                        finger_q + SQUEEZE_LEAD + LEAD_PER_SPEED * max(finger_qd, 0.0),
+                        finger_q + squeeze_lead + LEAD_PER_SPEED * max(finger_qd, 0.0),
                     )
                 else:
                     target[finger_col] = finger_request
@@ -699,7 +970,7 @@ def main() -> int:
                 ) * (dt_s / CURVE.thermal_time_constant)
                 curve_margin = curve_limit - magnitude
                 effective_margin = effective_limit - magnitude
-                torque_rows.append({
+                torque_log.add({
                     "run_id": batch.run_id, "phase": batch.phase, "joint": joint,
                     "substep": batch.substep, "control_step": batch.control_step,
                     "time_s": batch.time_s, "dt_s": batch.dt_s,
@@ -829,6 +1100,17 @@ def main() -> int:
             robot_clearance, robot_near, brewer_near = _set_clearance(
                 mujoco, model, data, robot_geom_array, brewer_geom_array, fromto
             )
+            if phase in CARRIED_PHASES:
+                pitcher_robot_clearance, robot_body_near, pitcher_near = _set_clearance(
+                    mujoco, model, data, robot_nonclaw_array, pitcher_shape_array, fromto,
+                    PITCHER_ROBOT_CONFIRM_DISTMAX_M,
+                )
+                pitcher_robot_pair = (
+                    f"{_name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, robot_body_near)};"
+                    f"{_name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, pitcher_near)}"
+                )
+            else:
+                pitcher_robot_clearance, pitcher_robot_pair = math.inf, ""
 
             if settled_pitcher_rot is None:
                 tilt = base_roll = base_pitch = base_drift = lift = 0.0
@@ -890,6 +1172,8 @@ def main() -> int:
                 "base_roll_deg": base_roll, "base_pitch_deg": base_pitch,
                 "support_foot_contacts": len(support_touching),
                 "brewer_clearance_m": clearance,
+                "pitcher_robot_clearance_m": pitcher_robot_clearance,
+                "pitcher_robot_nearest_pair": pitcher_robot_pair,
                 "robot_brewer_clearance_m": robot_clearance,
                 "robot_brewer_nearest_pair": (
                     f"{_name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, robot_near)};"
@@ -1007,6 +1291,7 @@ def main() -> int:
                     None if stream_points is None else [p.copy() for p in stream_points]
                 )
     finally:
+        torque_log.close()
         env.close()
 
     if settled_pitcher_z is None:
@@ -1015,15 +1300,13 @@ def main() -> int:
     torque_csv = out / "torque_substeps.csv"
     motion_csv = out / "motion_substeps.csv"
     stream_csv = out / "stream_samples.csv"
-    for path, rows in (
-        (torque_csv, torque_rows), (motion_csv, motion_rows), (stream_csv, stream_rows)
-    ):
+    for path, rows in ((motion_csv, motion_rows), (stream_csv, stream_rows)):
         with path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
             writer.writeheader()
             writer.writerows(rows)
 
-    torque_summary = _summarize_torque(torque_rows, dt_s)
+    torque_summary = torque_log.summary()
     whole_joint = [value for value in torque_summary.values() if value["phase"] == "whole_run"]
     torque_pass = all(
         value["minimum_curve_margin_nm"] >= -1e-4
@@ -1293,6 +1576,8 @@ def main() -> int:
     qpos_array = np.asarray(render_states)
     state_sha256 = hashlib.sha256(qpos_array.astype("<f8").tobytes()).hexdigest()
     video = out / "m4_spiral_pour.mp4"
+    start_frame = out / "m4_start.png"
+    mid_spiral_frame = out / "m4_mid_spiral.png"
     spiral_frame = out / "m4_outer_spiral.png"
     set_down_frame = out / "m4_set_down.png"
     render_enabled = not args.no_render and not args.fast_check
@@ -1320,7 +1605,9 @@ def main() -> int:
             model, mujoco, qpos_array, render_stream_paths, camera,
             float(config["render_fps"]), video,
         )
-        for timestamp, frame in ((35.0, spiral_frame), (55.0, set_down_frame)):
+        for timestamp, frame in _key_frame_times(config, (
+            start_frame, mid_spiral_frame, spiral_frame, set_down_frame,
+        )):
             subprocess.run([
                 imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error",
                 "-ss", str(timestamp), "-i", str(video), "-frames:v", "1", str(frame),
@@ -1349,6 +1636,13 @@ def main() -> int:
         ),
         "commit_sha": commit_sha,
         "backend": "native:cpu", "seed": seed,
+        "stance_retarget": retarget.report(),
+        "grip_contact": grip_contact,
+        "grip_squeeze_lead_rad": squeeze_lead,
+        "spawn_offset": {
+            "dx_m": spawn_dx, "dy_m": spawn_dy, "dyaw_deg": spawn_dyaw_deg,
+            "nominal": not (spawn_dx or spawn_dy or spawn_dyaw_deg),
+        },
         "task_geometry": "jumper.barista", "scene": "coffee_bar",
         "runtime": {
             "task_id": "jumper.barista", "actuator_class": type(servo).__name__,
@@ -1405,6 +1699,7 @@ def main() -> int:
             "minimum_pitcher_brewer_clearance_all_phases_m": min(
                 row["brewer_clearance_m"] for row in motion_rows
             ),
+            "pitcher_robot_clearance": _pitcher_robot_clearance_summary(motion_rows),
             "minimum_robot_brewer_clearance_all_phases_m": minimum_robot_brewer_clearance,
             "nearest_robot_brewer_pair": nearest_robot_row["robot_brewer_nearest_pair"],
             "nearest_robot_brewer_time_s": nearest_robot_row["time_s"],
@@ -1473,7 +1768,7 @@ def main() -> int:
         },
         "torque": {
             "units": {"q": "rad", "qd": "rad/s", "tau": "N m", "time": "s"},
-            "row_count": len(torque_rows), "rows_per_substep": len(joint_order),
+            "row_count": torque_log.count, "rows_per_substep": len(joint_order),
             "joint_count": len(joint_order), "curve_tolerance_nm": 1e-4,
             "thermal_tolerance": 1e-5, "passes": torque_pass,
             "per_joint_and_phase": torque_summary,
@@ -1492,6 +1787,8 @@ def main() -> int:
         "artifacts": {
             "torque_csv": str(torque_csv), "motion_csv": str(motion_csv),
             "stream_csv": str(stream_csv), "video": str(video) if render_enabled else None,
+            "start_frame": str(start_frame) if render_enabled else None,
+            "mid_spiral_frame": str(mid_spiral_frame) if render_enabled else None,
             "spiral_frame": str(spiral_frame) if render_enabled else None,
             "set_down_frame": str(set_down_frame) if render_enabled else None,
             "dimensions_px": [WIDTH, HEIGHT],
@@ -1533,13 +1830,19 @@ def main() -> int:
           f"collision geometry intact={collision_integrity['passes']}")
     print(f"[m4] payload={payload['design_total_kg']:.3f} kg; "
           f"torque pass={torque_pass}; overall pass={summary['passes']}")
+    carried_clearance = summary["motion"]["pitcher_robot_clearance"]["by_scope"]["carried"]
+    print(f"[m4] min carried pitcher-robot clearance="
+          f"{carried_clearance['minimum_m'] * 1000:.2f} mm "
+          f"({carried_clearance['nearest_pair']} at {carried_clearance['time_s']:.3f} s); "
+          f"carried grasp translation="
+          f"{summary['motion']['maximum_carried_grasp_translation_m'] * 1000:.3f} mm")
     print(f"[m4] qpos sha256={state_sha256}")
     for path in (torque_csv, motion_csv, stream_csv, summary_path):
         print(f"[m4] artifact: {path}")
     if args.save_render_states:
         print(f"[m4] artifact: {render_states_path}")
     if render_enabled:
-        for path in (video, spiral_frame, set_down_frame):
+        for path in (video, start_frame, mid_spiral_frame, spiral_frame, set_down_frame):
             print(f"[m4] artifact: {path}")
     checked_pass = (
         summary["reachability"]["passes"]
