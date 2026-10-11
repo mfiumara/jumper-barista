@@ -56,7 +56,7 @@ class PairClearance:
 
     def report(self):
         return {"scope": "spiral, every physics substep",
-                "robot_scope": "all robot collision geoms, including every claw surface",
+                "robot_scope": "all robot geoms, including visual geoms and every claw surface",
                 "pitcher_scope": "all external pitcher geoms including the visual spout",
                 "excluded_pairs": [list(pair) for pair in INTENTIONAL_GRASP_PAIRS],
                 "samples": self.samples, **self.minima}

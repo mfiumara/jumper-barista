@@ -795,7 +795,9 @@ def main() -> int:
         if not _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index).startswith(CLAW_PREFIXES)
     ], dtype=np.int64)
     pair_clearance = _load_sibling("m4_pair_clearance").PairClearance(
-        robot_geom_array, pitcher_shape_array,
+        [index for index in range(model.ngeom)
+         if _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index).startswith("robot/")],
+        pitcher_shape_array,
         {index: _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index)
          for index in range(model.ngeom)},
     )

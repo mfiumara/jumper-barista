@@ -181,6 +181,8 @@ grasp pairs (robot geom, pitcher geom):
 | `robot/LF_palm_grip_insert_link_meshcol` | `bar_top_grip_collar_b` |
 
 Every other claw surface and pitcher part remains in that measurement, as does the display.
+All robot geoms are included, even non-colliding visual geoms; the intentional-pair list
+does not silently exempt a similarly named visual geom.
 Actual contact distances contribute to the unrestricted and non-exempt minima, preserving
 penetration rather than treating a distance-solver confirmation as positive clearance.
 The old non-claw metric remains for comparison; neither metric changes the run_m4 gates.
