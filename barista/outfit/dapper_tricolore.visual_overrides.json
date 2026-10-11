@@ -1,0 +1,335 @@
+{
+  "format": "jumper-barista-visual-overrides/1",
+  "outfit": "Dapper Tricolore",
+  "concept": "C",
+  "source": "barista/outfit/concepts.py CONCEPTS[C] @711e027; decal 0.3 mm proud",
+  "display_only": true,
+  "frame": "upper_shell_link (+x face, +y robot-left, +z up), metres, quat wxyz",
+  "collision": {
+    "contype": 0,
+    "conaffinity": 0
+  },
+  "density": 0.0,
+  "group": 2,
+  "recolour": [
+    {
+      "geom": "base_link_visual",
+      "rgba": [
+        0.96,
+        0.96,
+        0.94,
+        1.0
+      ]
+    }
+  ],
+  "geoms": [
+    {
+      "name": "outfit_hat_brim",
+      "body": "upper_shell_link",
+      "type": "cylinder",
+      "size": [
+        0.056,
+        0.002,
+        0.0
+      ],
+      "pos": [
+        -0.03,
+        0.0,
+        0.041
+      ],
+      "quat": [
+        0.99756405,
+        0.0,
+        0.069756474,
+        0.0
+      ],
+      "rgba": [
+        0.86,
+        0.74,
+        0.5,
+        1.0
+      ],
+      "decal": false
+    },
+    {
+      "name": "outfit_hat_crown",
+      "body": "upper_shell_link",
+      "type": "cylinder",
+      "size": [
+        0.034,
+        0.015,
+        0.0
+      ],
+      "pos": [
+        -0.032,
+        0.0,
+        0.06
+      ],
+      "quat": [
+        0.99756405,
+        0.0,
+        0.069756474,
+        0.0
+      ],
+      "rgba": [
+        0.86,
+        0.74,
+        0.5,
+        1.0
+      ],
+      "decal": false
+    },
+    {
+      "name": "outfit_hat_crown_top",
+      "body": "upper_shell_link",
+      "type": "ellipsoid",
+      "size": [
+        0.034,
+        0.032,
+        0.006
+      ],
+      "pos": [
+        -0.034,
+        0.0,
+        0.075
+      ],
+      "quat": [
+        0.99756405,
+        0.0,
+        0.069756474,
+        0.0
+      ],
+      "rgba": [
+        0.86,
+        0.74,
+        0.5,
+        1.0
+      ],
+      "decal": false
+    },
+    {
+      "name": "outfit_band_verde",
+      "body": "upper_shell_link",
+      "type": "cylinder",
+      "size": [
+        0.0345,
+        0.0018,
+        0.0
+      ],
+      "pos": [
+        -0.031,
+        0.0,
+        0.048
+      ],
+      "quat": [
+        0.99756405,
+        0.0,
+        0.069756474,
+        0.0
+      ],
+      "rgba": [
+        0.0,
+        0.55,
+        0.27,
+        1.0
+      ],
+      "decal": false
+    },
+    {
+      "name": "outfit_band_bianco",
+      "body": "upper_shell_link",
+      "type": "cylinder",
+      "size": [
+        0.0345,
+        0.0018,
+        0.0
+      ],
+      "pos": [
+        -0.0315,
+        0.0,
+        0.0516
+      ],
+      "quat": [
+        0.99756405,
+        0.0,
+        0.069756474,
+        0.0
+      ],
+      "rgba": [
+        0.96,
+        0.96,
+        0.94,
+        1.0
+      ],
+      "decal": false
+    },
+    {
+      "name": "outfit_band_rosso",
+      "body": "upper_shell_link",
+      "type": "cylinder",
+      "size": [
+        0.0345,
+        0.0018,
+        0.0
+      ],
+      "pos": [
+        -0.032,
+        0.0,
+        0.0552
+      ],
+      "quat": [
+        0.99756405,
+        0.0,
+        0.069756474,
+        0.0
+      ],
+      "rgba": [
+        0.8,
+        0.11,
+        0.17,
+        1.0
+      ],
+      "decal": false
+    },
+    {
+      "name": "outfit_tache_l",
+      "body": "upper_shell_link",
+      "type": "ellipsoid",
+      "size": [
+        0.00015,
+        0.012007616,
+        0.0015
+      ],
+      "pos": [
+        0.1007405,
+        0.0135,
+        -0.0236
+      ],
+      "quat": [
+        0.999818775,
+        -0.019037263,
+        -0.0,
+        0.0
+      ],
+      "rgba": [
+        0.07,
+        0.05,
+        0.04,
+        1.0
+      ],
+      "decal": true
+    },
+    {
+      "name": "outfit_tache_l_r",
+      "body": "upper_shell_link",
+      "type": "ellipsoid",
+      "size": [
+        0.00015,
+        0.012007616,
+        0.0015
+      ],
+      "pos": [
+        0.1007405,
+        -0.0135,
+        -0.0236
+      ],
+      "quat": [
+        -0.019037263,
+        0.999818775,
+        0.0,
+        0.0
+      ],
+      "rgba": [
+        0.07,
+        0.05,
+        0.04,
+        1.0
+      ],
+      "decal": true
+    },
+    {
+      "name": "outfit_towel_top",
+      "body": "upper_shell_link",
+      "type": "box",
+      "size": [
+        0.016,
+        0.026,
+        0.0025
+      ],
+      "pos": [
+        -0.084,
+        -0.04,
+        0.02
+      ],
+      "quat": [
+        0.984807753,
+        0.0,
+        -0.173648178,
+        0.0
+      ],
+      "rgba": [
+        0.93,
+        0.89,
+        0.8,
+        1.0
+      ],
+      "decal": false
+    },
+    {
+      "name": "outfit_towel_back",
+      "body": "upper_shell_link",
+      "type": "box",
+      "size": [
+        0.0025,
+        0.026,
+        0.014
+      ],
+      "pos": [
+        -0.104,
+        -0.04,
+        0.0
+      ],
+      "quat": [
+        0.998629535,
+        0.0,
+        -0.052335956,
+        0.0
+      ],
+      "rgba": [
+        0.93,
+        0.89,
+        0.8,
+        1.0
+      ],
+      "decal": false
+    },
+    {
+      "name": "outfit_towel_stripe",
+      "body": "upper_shell_link",
+      "type": "box",
+      "size": [
+        0.003,
+        0.026,
+        0.0022
+      ],
+      "pos": [
+        -0.104,
+        -0.04,
+        -0.004
+      ],
+      "quat": [
+        0.998629535,
+        0.0,
+        -0.052335956,
+        0.0
+      ],
+      "rgba": [
+        0.8,
+        0.11,
+        0.17,
+        1.0
+      ],
+      "decal": false
+    }
+  ]
+}
