@@ -75,8 +75,9 @@ has done this.
 
 - Posting to X, YouTube or any other platform, and submitting the entry.
 - Spending money (GPU rental, assets).
-- Pushing to `origin` (mfiumara/jumper-barista): the manager pushes independently accepted
-  commits only. Never open PRs or issues against upstream KingKongRobotics.
+- **No pushes at all** while `origin` (mfiumara/jumper-barista) is public. Everything stays
+  local until Mattia explicitly decides how to publish. Never open PRs or issues against
+  upstream KingKongRobotics.
 - Adding third-party assets (meshes, music, textures) needs licence evidence recorded in
   `barista/SOURCES.md`.
 
