@@ -398,6 +398,10 @@ def test_fish_audio_pipeline_offline_with_a_fake_server(no_network, tmp_path, mo
     assert order["intent"]["drink"] == "v60_pour_over"
     confirm = manifest["lines"][-1]
     assert confirm["eye_keyframes"][-1][1] == "wink"
+    assert manifest["placeholder"] is False and manifest["placeholder_label"] is None
+    # Drop-in swap: same filenames and line keys as the placeholder run.
+    assert [x["audio_path"] for x in manifest["lines"]] == [
+        "audio/exclaim.wav", "audio/order.wav", "audio/confirm.wav"]
     spend = manifest["spend"]
     assert spend["usd_this_run_ledger"] == pytest.approx(0.03)
     assert spend["usd_this_run_wallet_delta"] == pytest.approx(0.03)
@@ -431,6 +435,11 @@ def test_end_to_end_placeholder_pipeline_writes_the_manifest(tmp_path):
     assert intent.normalise(order["transcript"]) == intent.normalise(order["text"])
     assert order["intent"]["drink"] == "v60_pour_over"
     assert all(x["transcript"] is None for x in manifest["lines"] if x["speaker"] == "jumper")
+    assert manifest["placeholder"] is True and manifest["publishable"] is False
+    assert "PLACEHOLDER" in manifest["placeholder_label"]
+    assert all(x["placeholder"] is True for x in manifest["lines"])
+    assert pipeline.validate_manifest(manifest, out) == []
+    assert manifest["lines"][-1]["eye_keyframes"][-1][1] == "wink"
 
 
 # --------------------------------------------------------------------------- eyes

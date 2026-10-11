@@ -36,7 +36,7 @@ python barista/character/eyes.py m4-hash-check --out DIR   # ~2-3 min, native:cp
 | name | what | network | cost |
 |---|---|---|---|
 | `placeholder-local` | macOS `say` to a 22.05 kHz 16-bit mono WAV (Jumper: `Alice`, it_IT; customer: `Karen`) | none | free |
-| `fish_audio` | Fish Audio Voice Design `voice-design-1`, one request per line (A3b, Mattia's approved provider) | `api.fish.audio` | $0.01/request, $3 cap |
+| `fish_audio` | Fish Audio Voice Design `voice-design-1`, one request per line (Mattia's approved provider; prepared in A3b, run in A3c) | `api.fish.audio` | $0.01/request, $3 cap |
 | `elevenlabs` | stub (not the approved provider) | refused | credits |
 
 `providers.get_provider(name, allow_spend=...)` is the only switch; the pipeline, manifest
@@ -45,7 +45,16 @@ and film do not change with the provider. A paid provider refuses unless **both*
 `FISH_API_KEY` or `FISH_AUDIO_API_KEY`) in the environment or in the engineer profile's
 `.env`. ElevenLabs then still stops with `NotImplementedError`. Keys are never printed.
 
-### Fish Audio (A3b)
+### Placeholder now, Fish Audio last (Mattia, 2026-10-11)
+
+The A3b deliverable for the film cut (A5) is the `placeholder-local` run. Its manifest says
+`"placeholder": true`, `"publishable": false` and carries `placeholder_label`; every line
+says `"placeholder": true`. Those renders are draft/internal only. The Fish Audio run (card
+A3c) is a drop-in swap: same `audio/<id>.wav` filenames, same line keys, same eye
+keyframes and STT/intent checks, and a re-run of STT on the new customer audio. A5 only has
+to re-point at the new manifest and re-render.
+
+### Fish Audio (A3c)
 
 ```bash
 python -m barista.voice.pipeline --out /path/outside/the/repo/voice --provider fish_audio --allow-spend
