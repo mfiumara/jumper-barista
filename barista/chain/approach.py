@@ -211,7 +211,7 @@ def run_approach(chain, model_home: dict, goal_xyzyaw, m4_start: dict, *, record
     goal_feet = plan.footholds_at(qpos0, goal)
     joints = dict(model_home)
 
-    def track(base_from, base_to, seconds, foot_fn, name, extra_targets=None):
+    def track(base_from, base_to, seconds, foot_fn, name, extra_targets=None, swing_leg=None):
         nonlocal joints
         t_start = chain.t_substep()
         n = ticks(seconds)
@@ -220,7 +220,16 @@ def run_approach(chain, model_home: dict, goal_xyzyaw, m4_start: dict, *, record
             s = k / n
             base = interp_pose(base_from, base_to, common.smooth(s))
             targets = foot_fn(s)
-            joints, err = ik.solve(qpos0, base, joints, targets, model_home)
+            if swing_leg is None:
+                joints, err = ik.solve(qpos0, base, joints, targets, model_home)
+            else:
+                # Stance legs against the planned body; the swinging leg against the body
+                # as measured, so its foothold lands where it is meant to in the world.
+                stance = {leg: p for leg, p in targets.items() if leg != swing_leg}
+                joints, err = ik.solve(qpos0, base, joints, stance, model_home)
+                joints, err2 = ik.solve(qpos0, measured_base(), joints,
+                                        {swing_leg: targets[swing_leg]}, model_home)
+                err = max(err, err2)
             worst = max(worst, err)
             cmd = dict(joints)
             if extra_targets:
@@ -243,7 +252,8 @@ def run_approach(chain, model_home: dict, goal_xyzyaw, m4_start: dict, *, record
             out[leg] = p
             return out
 
-        track(mid, mid, DURATIONS["step"] + DURATIONS["step_pause"], swing, f"step_{leg}")
+        track(mid, mid, DURATIONS["step"] + DURATIONS["step_pause"], swing, f"step_{leg}",
+              swing_leg=leg)
         feet[leg] = end
     # 4. LF, still planted where it walked to (>= 36 mm from the pitcher), lifts straight up
     #    and swings over to the high claw-open pose while the body is still 40 mm short.

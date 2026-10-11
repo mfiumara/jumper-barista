@@ -56,7 +56,7 @@ ORIENTATION_WEIGHT_M_PER_RAD = 0.05
 REGULARISATION_M_PER_RAD = 0.002
 IK_ITERATIONS = 8
 #: Share of a base-yaw error the carried pitcher's heading follows (see ``_Hooks.target``).
-YAW_FOLLOW = 1.0
+YAW_FOLLOW = 0.5
 #: Set-down: xy integral gain (1/s) and clamp on the measured pitcher origin during ``lower``.
 LOWER_KI = 2.0
 LOWER_I_CLAMP_M = 0.015
@@ -242,8 +242,8 @@ class _Hooks:
             palm_cmd = ref["palm_cmd"][index]
             palm_cmd_rot = ref["palm_cmd_rot"][index].reshape(3, 3)
             # A base-yaw error: the spout stays on the station's path exactly, while the
-            # pitcher's heading follows the robot by YAW_FOLLOW of the error (1.0: the pitcher
-            # keeps its pose relative to the robot's head, the clearance the -2 deg sweep needs).
+            # pitcher's heading follows the robot by YAW_FOLLOW of the error (0.5 measured best
+            # of 0 / 0.5 / 1.0 on the +-2 deg spawn sweep).
             dyaw = common.wrap(common.yaw_of(base_quat) - common.yaw_of(ref["base_quat"][index]))
             half = YAW_FOLLOW * dyaw
             rz = np.array([[math.cos(half), -math.sin(half), 0.0],
@@ -514,7 +514,13 @@ def _install_state_writes(robot, env, start_state, restore, torch) -> None:
     real_pose = robot.write_root_link_pose_to_sim
     real_joint = robot.write_joint_state_to_sim
 
+    def from_run_m4() -> bool:
+        # Only run_m4's own two spawn writes are replaced; env.reset()'s events pass through.
+        return sys._getframe(2).f_code.co_filename.endswith("run_m4.py")
+
     def pose(root_pose, *a, **k):
+        if not from_run_m4():
+            return real_pose(root_pose, *a, **k)
         calls["pose"] += 1
         if calls["pose"] > 1:
             return real_pose(root_pose, *a, **k)
@@ -530,6 +536,8 @@ def _install_state_writes(robot, env, start_state, restore, torch) -> None:
         return None
 
     def joint(pos, vel, *a, **k):
+        if not from_run_m4():
+            return real_joint(pos, vel, *a, **k)
         calls["joint"] += 1
         if calls["joint"] > 1:
             return real_joint(pos, vel, *a, **k)
