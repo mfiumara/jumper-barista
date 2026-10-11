@@ -122,7 +122,10 @@ def test_pair_clearance_exempts_only_exact_grasp_pairs_and_keeps_penetration():
     data = SimpleNamespace(geom_xpos=np.zeros((7, 3)), ncon=1,
                            contact=[SimpleNamespace(geom1=3, geom2=0, dist=-0.001)])
     distances = {(0, 3): 0.003, (1, 4): 0.0, (2, 4): 0.002, (6, 5): 0.006}
-    tracker.observe(model, data, 22.0, lambda a, b: distances.get((a, b), 0.05), 0.1)
+    def distance(a, b):
+        assert (a, b) != (0, 3), "real contact must not be sent to the confirmation solver"
+        return distances.get((a, b), 0.05)
+    tracker.observe(model, data, 22.0, distance, 0.1)
     result = tracker.report()
     assert result["unrestricted"]["minimum_m"] == -0.001
     excluded = result["excluding_intentional_grasp_pairs"]
@@ -133,6 +136,7 @@ def test_pair_clearance_exempts_only_exact_grasp_pairs_and_keeps_penetration():
     data.contact = [SimpleNamespace(geom1=0, geom2=5, dist=-0.0002)]
     tracker.observe(model, data, 23.0, lambda a, b: 0.05, 0.1)
     assert tracker.report()["excluding_intentional_grasp_pairs"]["minimum_m"] == -0.0002
+    assert tracker.report()["non_exempt_actual_contact"]["minimum_m"] == -0.0002
 
 
 def test_pair_clearance_far_pairs_are_conservative_and_head_is_not_exempt():

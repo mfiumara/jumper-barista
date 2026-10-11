@@ -183,9 +183,10 @@ grasp pairs (robot geom, pitcher geom):
 Every other claw surface and pitcher part remains in that measurement, as does the display.
 All robot geoms are included, even non-colliding visual geoms; the intentional-pair list
 does not silently exempt a similarly named visual geom.
-Actual contact distances contribute to the unrestricted and non-exempt minima, preserving
-penetration. Raw zero/negative geom-distance solver values are retained conservatively,
-not promoted to positive clearance through the legacy distmax confirmation ladder.
+Actual contact distances determine contacting pairs, preserving penetration. Other near
+pairs use the existing six-point distmax confirmation ladder: raw mesh distances can report
+spurious deep penetration for separated parts. Far pairs retain bounding-sphere lower bounds.
+Contact depths are never promoted by that confirmation ladder.
 The old non-claw metric remains for comparison; neither metric changes the run_m4 gates.
 
 The full-suite baseline at `e6765ea` failed deploy-source provenance, posture mirroring and

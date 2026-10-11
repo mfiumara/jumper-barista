@@ -25,13 +25,14 @@ class PairClearance:
         self.minima = {scope: {"minimum_m": math.inf, "nearest_pair": None, "time_s": None}
                        for scope in ("unrestricted", "excluding_intentional_grasp_pairs")}
         self.samples = 0
+        self.non_exempt_contact = {"minimum_m": math.inf, "nearest_pair": None, "time_s": None}
 
     def observe(self, model, data, time_s, distance, prefilter_m):
-        """Near pairs use raw signed distance; far pairs retain a lower bound.
+        """Contact pairs use measured contact depth; other pairs use confirmed distance.
 
-        Raw zero/negative solver values are conservative: unlike the legacy non-claw
-        report, this report never promotes them through a distmax confirmation ladder.
-        Actual contact distances also contribute, preserving measured penetration.
+        The convex distance solver sometimes returns spurious deep penetration for
+        separated meshes. Confirm non-contact pairs, but never promote a real contact
+        depth to positive clearance. Far pairs retain their bounding-sphere lower bound.
         """
         gaps = (np.linalg.norm(data.geom_xpos[self.robot][:, None, :]
                                - data.geom_xpos[self.pitcher][None], axis=2)
@@ -44,9 +45,16 @@ class PairClearance:
             for j, pitcher in enumerate(self.pitcher):
                 pair = (int(robot), int(pitcher))
                 value = float(gaps[i, j])
-                if value <= prefilter_m:
+                contact_depth = contacts.get(frozenset(pair))
+                if contact_depth is not None:
+                    value = contact_depth
+                    if pair not in self.excluded and value < self.non_exempt_contact["minimum_m"]:
+                        self.non_exempt_contact.update(
+                            minimum_m=value, time_s=time_s,
+                            nearest_pair=[self.names[index] for index in pair],
+                        )
+                elif value <= prefilter_m:
                     value = distance(*pair)
-                value = min(value, contacts.get(frozenset(pair), math.inf))
                 for scope, minimum in self.minima.items():
                     if scope != "unrestricted" and pair in self.excluded:
                         continue
@@ -59,7 +67,8 @@ class PairClearance:
         return {"scope": "spiral, every physics substep",
                 "robot_scope": "all robot geoms, including visual geoms and every claw surface",
                 "pitcher_scope": "all external pitcher geoms including the visual spout",
-                "distance_method": "raw signed geom distance and actual contact distance; "
+                "distance_method": "actual contact depths, otherwise confirmed geom distance; "
                                    "far pairs use bounding-sphere lower bounds",
                 "excluded_pairs": [list(pair) for pair in INTENTIONAL_GRASP_PAIRS],
+                "non_exempt_actual_contact": self.non_exempt_contact,
                 "samples": self.samples, **self.minima}
