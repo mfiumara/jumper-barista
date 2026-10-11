@@ -154,6 +154,28 @@ def test_perturbed_state_is_a_rigid_planar_move() -> None:
     np.testing.assert_array_equal(out["qpos"][7:], qpos[7:])
 
 
+def test_yaw_sweep_grid_targets_absolute_arrival_yaw_and_finds_bands() -> None:
+    sweep = _load("pour_sweep")
+    grid = sweep.yaw_grid(-1.0, 3.0, 0.5)
+    assert grid == [-1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+    with pytest.raises(ValueError):
+        sweep.yaw_grid(-1.0, 3.0, 0.3)
+    qpos = np.zeros(36)
+    qpos[3:7] = common.yaw_quat(math.radians(-0.66))
+    measured = sweep.arrival_yaw_error_deg(qpos, 0.0)
+    assert measured == pytest.approx(-0.66)
+    cases = sweep.yaw_cases(grid, measured)
+    for value, (dx, dy, dyaw) in zip(grid, cases.values(), strict=True):
+        assert dx == 0.0 and dy == 0.0
+        moved = pour.perturbed_state({"qpos": qpos, "qvel": np.zeros(35)}, dx, dy, dyaw)
+        assert sweep.arrival_yaw_error_deg(moved["qpos"], 0.0) == pytest.approx(value)
+    found = sweep.bands([(1.0, True), (-1.0, False), (0.0, True), (0.5, True), (1.5, False),
+                         (2.0, True)])
+    assert [(b["from_deg"], b["to_deg"], b["width_deg"]) for b in found] == [
+        (0.0, 1.0, 1.0), (2.0, 2.0, 0.0)]
+    assert found[0]["centre_deg"] == 0.5
+
+
 def test_rotation_log_round_trips() -> None:
     axis = np.array([0.3, -0.5, 0.8])
     axis /= np.linalg.norm(axis)

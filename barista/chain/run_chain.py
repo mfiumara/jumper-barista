@@ -54,6 +54,9 @@ POUR_PHASES = ("settle", "approach", "close", "lift", "lift_settle", "lift_hold"
                "pour_in", "spiral", "pour_out")
 SET_DOWN_PHASES = ("return", "lower", "set_down", "release", "clear_retreat", "retreat",
                    "final_settle")
+#: Yaw added to the scripted approach's pour_start target (supervisor decision 15:15: bias
+#: toward the centre of the passing arrival-yaw band measured by pour_sweep.py --yaw-grid).
+POUR_START_YAW_BIAS_DEG = 0.0
 
 
 def parse() -> argparse.Namespace:
@@ -71,6 +74,9 @@ def parse() -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=common.SEED)
     p.add_argument("--stop-after", default=None, choices=("align",),
                    help="debug: stop after this beat and save the arrival state")
+    p.add_argument("--pour-start-yaw-bias-deg", type=float, default=POUR_START_YAW_BIAS_DEG,
+                   help="yaw added to the approach's pour_start target (scripted approach only; "
+                        "the pour, its reference and its gates are unchanged)")
     return p.parse_args()
 
 
@@ -251,7 +257,8 @@ def main() -> int:
     cfg = common.cafe_m4_trajectory(1.0 / common.PHYSICS_HZ, common.M4_DECIMATION_1K)
     m4_start = approach.m4_start_pose(dict(HOME), cfg, GRIPPER_OPEN)
     bs = cfg["base_start"]
-    goal = (bs["position_m"][0], bs["position_m"][1], 0.0, float(bs["yaw_rad"]))
+    goal = (bs["position_m"][0], bs["position_m"][1], 0.0,
+            float(bs["yaw_rad"]) + math.radians(args.pour_start_yaw_bias_deg))
     ref = np.load(args.reference)
     arm_ik = pour.ArmIK(chain.model)
 
@@ -384,6 +391,7 @@ def main() -> int:
         "pre_align_error": {"along_mm": 1e3 * pre_align_err[0], "lat_mm": 1e3 * pre_align_err[1],
                             "yaw_deg": math.degrees(pre_align_err[2])},
         "approach": approach_report,
+        "pour_start_yaw_bias_deg": args.pour_start_yaw_bias_deg,
         "falls_torso_on_bar_ticks": fell,
         "pour": {"run_m4_exit_code": result["exit_code"], "m4_passes": result["passes"],
                  "failing_gates": pour.failing_gates(pour_summary),
