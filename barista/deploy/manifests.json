@@ -1,0 +1,19 @@
+{
+  "schema": "kk-deploy-manifests/1",
+  "_source": "Jumper Barista's bundle, kept beside the project instead of in deploy/manifests.json so upstream's file stays untouched. `python scripts/deploy.py --manifests barista/deploy/manifests.json --allow-incomplete` builds it.",
+  "_simulation_only": "MuJoCo simulation project. The bundled mode is jumper.barista's contract driven by the five-foot stance policy with the left-front claw carried; it does not contain the spiral pour, which is the reference replay barista/verification/run_m4.py. No real-robot run is implied, and --allow-incomplete leaves out the board's controller and .rknn on purpose.",
+  "bundles": {
+    "barista": {
+      "description": "jumper.barista: Jumper standing on five feet with the left-front claw carried (the five-foot stance policy under the barista task contract). Simulation-only; the pour is replayed by barista/verification/run_m4.py.",
+      "fsm": "barista.controller.toml",
+      "modes": {
+        "barista": {
+          "task": "jumper.barista",
+          "_note": "Export first: python scripts/export.py --task jumper.barista --backend native --device cpu --checkpoint tasks/jumper/five_foot/out/example/model_86600.pt --out tasks/jumper/barista/out/m5 --no-video. Exports are gitignored, so this path exists only after that command.",
+          "policy": "tasks/jumper/barista/out/m5",
+          "hook": { "side": "left" }
+        }
+      }
+    }
+  }
+}

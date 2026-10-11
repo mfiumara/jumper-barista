@@ -1,0 +1,38 @@
+# Jumper Barista's state machine, minus the modes (barista/deploy/manifests.json
+# owns those). It is the shape scripts/deploy.py synthesises for a single-policy
+# bundle: one mode, a safe hold on stale feedback, and no tilt fallback.
+#
+# Simulation-only: this bundle is for `play --app` in MuJoCo, built with
+# --allow-incomplete, so it carries no board controller and no .rknn. A bundle
+# aimed at hardware writes its own file with a tilt limit (see
+# deploy/jumper.controller.toml).
+
+[fsm]
+initial_state = "barista"
+warm_start_ref = "barista"
+safe_state = "safe"
+tilt_limit = 3.15
+state_timeout_ms = 200
+command_timeout_ms = 3600000
+mode_switch_ramp_s = 0.0
+pose_reach_tol = 0.10
+warm_start_duration_s = 0.0
+ramp_kp = 0.15
+ramp_kd = 0.01
+
+[[fsm.state]]
+name = "safe"
+hold_current = true
+kd = 0.01
+
+[[fsm.rule]]
+when = "feedback_stale"
+enter = "safe"
+
+[[fsm.rule]]
+when = "in_state:safe"
+enter = "@initial"
+
+[[fsm.rule]]
+when = "always"
+enter = "barista"

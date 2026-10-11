@@ -1,4 +1,4 @@
-<!-- tracks: README.md @ sha256:2f51540bc342a691 -->
+<!-- tracks: README.md @ sha256:73b9122b8745f39b -->
 
 ![跳跳](docs/media/jumper-hero-zh.png)
 
@@ -59,6 +59,61 @@
 和 [MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp)。
 外观与场景示例图片来自 jumper-design，出处见[图片来源](docs/media/DESIGN_SOURCES.md)，
 第三方材料归属见 [NOTICE](NOTICE)。
+
+## Jumper Barista（跳跳咖啡师）
+
+这是一个 fork 项目：在 **MuJoCo 仿真**中，跳跳拿起一只小手冲壶，在 V60 上方缓慢、居中地注出
+3.5 圈螺旋，然后把手冲壶放回台面。**水流只是粒子/视觉近似**（从实测壶嘴位姿发出的无质量弹道水流，
+壶内另有 80 g 刚性质量代替水）；MuJoCo 没有流体。这里的一切都没有在真实机器人上运行过。目标、
+限制与里程碑见 [`barista/CHARTER.md`](barista/CHARTER.md)；场景与回放检验见
+[`barista/COFFEE_SCENE.md`](barista/COFFEE_SCENE.md)。
+
+全部在 `native:cpu` 后端运行（在 Apple M5 Pro、macOS 上测试）。生成的输出放在 `out/` 下，
+该目录已被 git 忽略。
+
+从干净的检出开始安装（Python 3.10–3.13；只有构建 bundle 才需要 Rust/cargo）：
+
+```bash
+git clone https://github.com/mfiumara/jumper-barista.git && cd jumper-barista
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install torch torchvision
+pip install -e .
+```
+
+回放并验证注水（约 3 分钟；只有全部检验通过才以退出码 0 结束：壶嘴螺旋、水流落点、接触、放回、
+载荷，以及按每个物理子步对照舵机曲线、300 ms 峰值和 1.2 N·m 预算的力矩审计）：
+
+```bash
+python barista/verification/run_m4.py --out out/barista/m4 --save-render-states
+```
+
+它会写出 `summary.json`、逐子步的 `torque_substeps.csv`、`motion_substeps.csv`、
+`stream_samples.csv`、一段 960×540 的验证视频，以及 `render_states.npz`（渲染帧率的 `qpos`
+与记录的水流路径，附带 `summary.json` 中报告的 qpos SHA-256）。
+
+从这次回放渲染影片（无界面；回放未通过时会拒绝）：
+
+```bash
+python barista/film/make_film.py --replay out/barista/m4 --out out/barista/film/jumper_barista_sim.mp4
+# 另一个剪辑版本，俯视注水段不带近景小窗：
+python barista/film/make_film.py --replay out/barista/m4 --out out/barista/film/jumper_barista_sim_no_inset.mp4 --no-inset
+```
+
+用仓库自带的工具构建并检查 `.app`。该 bundle 携带 `jumper.barista` 的契约，由五足站立策略驱动，
+左前爪作为夹爪；螺旋注水本身是上面的参考回放，并不是 bundle 中的一个模式。`--allow-incomplete`
+不包含机器人的交叉编译控制器和 `.rknn`，因为这个 bundle 只用于仿真。
+
+```bash
+python scripts/export.py --task jumper.barista --backend native --device cpu \
+  --checkpoint tasks/jumper/five_foot/out/example/model_86600.pt \
+  --out tasks/jumper/barista/out/m5 --no-video
+python scripts/deploy.py --manifests barista/deploy/manifests.json --allow-incomplete --bundle out/barista/bundle
+python scripts/deploy.py --check-reference out/barista/bundle/barista
+python scripts/play.py --task jumper.barista --backend native --device cpu --num_envs 1 \
+  --scene coffee_bar --headless --steps 250 --app out/barista/bundle/barista.app
+```
+
+第三方素材及其许可记录在 [`barista/SOURCES.md`](barista/SOURCES.md)。
 
 ## 许可证
 

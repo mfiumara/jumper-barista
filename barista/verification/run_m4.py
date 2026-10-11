@@ -36,6 +36,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--no-render", action="store_true")
     parser.add_argument(
+        "--save-render-states",
+        action="store_true",
+        help=(
+            "also write render_states.npz (render-rate qpos and the logged stream paths) "
+            "so barista/film/make_film.py can re-render the replay from other angles"
+        ),
+    )
+    parser.add_argument(
         "--fast-check",
         action="store_true",
         help=(
@@ -1288,6 +1296,25 @@ def main() -> int:
     spiral_frame = out / "m4_outer_spiral.png"
     set_down_frame = out / "m4_set_down.png"
     render_enabled = not args.no_render and not args.fast_check
+    render_states_path = out / "render_states.npz"
+    if args.save_render_states:
+        # Pure export of the already-logged render-rate state; it changes no gate,
+        # log or hash above. NaN rows mean "no stream drawn at this frame".
+        stream_array = np.full(
+            (len(render_stream_paths), STREAM_PATH_POINTS, 3), np.nan, dtype=np.float64
+        )
+        for index, points in enumerate(render_stream_paths):
+            if points is not None:
+                stream_array[index] = np.asarray(points, dtype=np.float64)
+        np.savez_compressed(
+            render_states_path,
+            qpos=qpos_array.astype("<f8"),
+            stream_paths=stream_array,
+            render_fps=np.float64(config["render_fps"]),
+            qpos_sha256=np.str_(state_sha256),
+            commit_sha=np.str_(commit_sha),
+            trajectory_sha256=np.str_(config_sha256),
+        )
     if render_enabled:
         _render(
             model, mujoco, qpos_array, render_stream_paths, camera,
@@ -1509,6 +1536,8 @@ def main() -> int:
     print(f"[m4] qpos sha256={state_sha256}")
     for path in (torque_csv, motion_csv, stream_csv, summary_path):
         print(f"[m4] artifact: {path}")
+    if args.save_render_states:
+        print(f"[m4] artifact: {render_states_path}")
     if render_enabled:
         for path in (video, spiral_frame, set_down_frame):
             print(f"[m4] artifact: {path}")

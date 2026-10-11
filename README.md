@@ -58,6 +58,65 @@ and [MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp).
 Example appearance and scene images come from jumper-design; [image sources](docs/media/DESIGN_SOURCES.md)
 and [third-party notices](NOTICE) record attribution.
 
+## Jumper Barista
+
+A fork project: in a **MuJoCo simulation**, Jumper picks up a small gooseneck pitcher, pours a
+slow, centred 3.5-turn spiral over a V60 and sets the pitcher back down. **The water is a
+particle/visual approximation** (a massless ballistic stream drawn from the measured spout pose,
+with an 80 g rigid mass proxy in the pitcher); MuJoCo has no fluid. Nothing here has run on a
+real robot. Goal, limits and milestones are in [`barista/CHARTER.md`](barista/CHARTER.md); the
+scene and the replay gates are described in [`barista/COFFEE_SCENE.md`](barista/COFFEE_SCENE.md).
+
+Everything runs on the `native:cpu` backend (tested on an Apple M5 Pro, macOS). Generated
+outputs go under `out/`, which is gitignored.
+
+Setup, from a clean checkout (Python 3.10–3.13; Rust/cargo is needed only for the bundle):
+
+```bash
+git clone https://github.com/mfiumara/jumper-barista.git && cd jumper-barista
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install torch torchvision
+pip install -e .
+```
+
+Replay and verify the pour (about 3 minutes; exit code 0 only if every gate passes: spout
+spiral, stream landings, contacts, set-down, payload and the per-substep torque audit against
+the servo curve, 300 ms peak and 1.2 N·m budget):
+
+```bash
+python barista/verification/run_m4.py --out out/barista/m4 --save-render-states
+```
+
+It writes `summary.json`, the per-substep `torque_substeps.csv`, `motion_substeps.csv`,
+`stream_samples.csv`, a 960×540 verifier video, and `render_states.npz` (render-rate `qpos` and
+logged stream paths, with the qpos SHA-256 that `summary.json` reports).
+
+Render the film from that replay (headless; it refuses a replay that did not pass):
+
+```bash
+python barista/film/make_film.py --replay out/barista/m4 --out out/barista/film/jumper_barista_sim.mp4
+# alternative cut without the close-up inset during the overhead pour:
+python barista/film/make_film.py --replay out/barista/m4 --out out/barista/film/jumper_barista_sim_no_inset.mp4 --no-inset
+```
+
+Build and check the `.app` with the repository's own tooling. The bundle carries the
+`jumper.barista` contract driven by the five-foot stance policy with the left-front claw
+carried; the spiral pour itself is the reference replay above, not a mode of the bundle.
+`--allow-incomplete` leaves out the robot's cross-built controller and `.rknn`, because this
+bundle is for simulation only.
+
+```bash
+python scripts/export.py --task jumper.barista --backend native --device cpu \
+  --checkpoint tasks/jumper/five_foot/out/example/model_86600.pt \
+  --out tasks/jumper/barista/out/m5 --no-video
+python scripts/deploy.py --manifests barista/deploy/manifests.json --allow-incomplete --bundle out/barista/bundle
+python scripts/deploy.py --check-reference out/barista/bundle/barista
+python scripts/play.py --task jumper.barista --backend native --device cpu --num_envs 1 \
+  --scene coffee_bar --headless --steps 250 --app out/barista/bundle/barista.app
+```
+
+Third-party assets and their licences are listed in [`barista/SOURCES.md`](barista/SOURCES.md).
+
 ## License
 
 Copyright 2026 KingKong Robotics.
