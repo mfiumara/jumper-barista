@@ -85,6 +85,13 @@ register(
     use="watching",
 )
 register(
+    id="cafe_bar",
+    description="warm cafe bar: the accepted V60 brew station rigidly placed 0.8 m along a "
+    "wooden bar, kettle dressing, off-camera door chime (simulation only)",
+    tags=("presentation", "barista", "prop", "cafe"),
+    use="watching",
+)
+register(
     id="swing",
     description="**adds a swing**: an A-frame and a plank seat the robot can stand on",
     tags=("prop", "outdoor"),
