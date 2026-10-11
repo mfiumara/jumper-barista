@@ -16,19 +16,20 @@ from __future__ import annotations
 
 import functools
 import math
+from typing import ClassVar
 
 import pytest
 
 torch = pytest.importorskip("torch", reason="the measurements are torch code")
 
-from tasks.jumper.common.constants import (  # noqa: E402
+from tasks.jumper.common.constants import (
     FOOT_SITE_Z,
     HOME,
     LEGS,
     NOMINAL_FOOT_XY,
     STAND_Z,
 )
-from tasks.jumper.posture.mdp.state import (  # noqa: E402
+from tasks.jumper.posture.mdp.state import (
     reference_footprint,
     twist_from_footprint,
 )
@@ -153,12 +154,12 @@ def test_the_nominal_footprint_still_describes_the_model() -> None:
     )
 
 
-def test_the_mirror_of_a_posture_is_the_posture_of_the_mirror() -> None:
+def test_the_mirror_of_a_posture_is_the_posture_of_the_mirror(monkeypatch) -> None:
     """`posture4` negates the twist and the roll and keeps pitch and height.
 
     Stated as the sign table because that is what the mirror is, and checked
-    against the geometry it comes from: mirroring the *footprint* in y has to
-    negate the twist the estimator reports. A wrong entry here trains the actor
+    against the geometry it comes from: mirroring both the footprint and its
+    reference negates the twist. A wrong entry here trains the actor
     on samples that say "lean left" beside a body leaning right, and the shapes
     match either way.
     """
@@ -168,22 +169,80 @@ def test_the_mirror_of_a_posture_is_the_posture_of_the_mirror() -> None:
     got = _mirror_slice(posture, "posture4")
     assert got[0].tolist() == pytest.approx([-0.2, -0.1, -0.3, 0.02], abs=1e-6)
 
-    # The geometric half: a footprint mirrored in y is a robot twisted the other
-    # way. Note the leg order mirrors too -- LF<->RF, LM<->RM, LR<->RR -- which is
-    # the permutation `symmetry.LEG_PERM` carries for per-foot quantities.
     from tasks.jumper.common.mdp.symmetry import LEG_PERM
+    from tasks.jumper.posture.mdp import state
 
     twisted = _footprint(math.radians(10.0))
     mirrored = twisted[LEG_PERM] * torch.tensor([1.0, -1.0])
-    # 1e-4 rather than the 1e-5 the other tests use: the robot's own footprint is
-    # not exactly mirror symmetric (LF sits at y = 0.0728 against RF's 0.072607,
-    # 0.2 mm apart), so mirroring a twisted footprint and re-fitting it lands
-    # 6e-5 rad -- 0.003 degrees -- from the exact negation. That is the model's
-    # asymmetry, not the estimator's error, and a tolerance tight enough to
-    # object to it would be pinning the URDF's rounding.
+    # Relative yaw changes sign when BOTH frames mirror. HOME is asymmetric;
+    # keeping its reference fixed is a different fit, checked separately below.
+    reference = reference_footprint(twisted.device)[LEG_PERM] * torch.tensor([1.0, -1.0])
+    monkeypatch.setattr(state, "reference_footprint", lambda device: reference.to(device))
     assert twist_from_footprint(mirrored).item() == pytest.approx(
-        -math.radians(10.0), abs=1e-4
+        -math.radians(10.0), rel=0, abs=1e-6
     )
+
+
+@pytest.mark.parametrize("deg", [-15.0, 0.0, 10.0, 45.0])
+def test_mirrored_nominal_footprint_has_the_fixed_reference_bias(deg: float) -> None:
+    """An asymmetric HOME is not its own mirror; do not hide its bias in atol.
+
+    For centered n and mirror Q (paired legs, y reflection), Q R(-t)n = R(t)Qn.
+    With A = sum(n dot Qn), B = sum(n cross Qn), the fit is
+    -t - atan2(B, A), not -t. Compute the offset from the raw coordinates in
+    scalar double precision, independently of the estimator and its cache.
+    """
+    from tasks.jumper.common.mdp.symmetry import LEG_PERM
+
+    assert [LEGS[i] for i in LEG_PERM] == ["RF", "LF", "RM", "LM", "RR", "LR"]
+    points = [complex(x, y) for x, y in NOMINAL_FOOT_XY]
+    center = sum(points) / len(points)
+    centered = [point - center for point in points]
+    correlation = sum(
+        point.conjugate() * centered[j].conjugate()
+        for point, j in zip(centered, LEG_PERM)
+    )
+    bias = -math.atan2(correlation.imag, correlation.real)
+    assert abs(bias) > 1e-4, "this fixture no longer distinguishes fixed and mirrored references"
+    angle = math.radians(deg)
+    mirrored = _footprint(angle)[LEG_PERM] * torch.tensor([1.0, -1.0])
+    assert twist_from_footprint(mirrored).item() == pytest.approx(-angle + bias, rel=0, abs=1e-6)
+
+
+@pytest.mark.parametrize("shear", [0.0, -0.25, 0.25])
+@pytest.mark.parametrize("deg", [-15.0, 0.0, 10.0, 45.0])
+def test_mirror_bias_matches_analytic_symmetric_and_sheared_controls(
+    monkeypatch, shear: float, deg: float,
+) -> None:
+    """A synthetic oracle catches sign/permutation errors and a forced zero bias.
+
+    The symmetric six points (x, +/-1), x in {1, 0, -1}, have sum x²=4,
+    sum y²=6 and sum xy=0. Shearing x by k*y gives A=10-6k², B=12k against
+    their mirror. k=0 must negate exactly; either nonzero k must NOT do so.
+    """
+    from tasks.jumper.common.mdp.symmetry import LEG_PERM
+    from tasks.jumper.posture.mdp import state
+
+    reference = torch.tensor([
+        [x + shear * y, y] for x in (1.0, 0.0, -1.0) for y in (1.0, -1.0)
+    ], dtype=torch.float64)
+    monkeypatch.setattr(state, "reference_footprint", lambda device: reference.to(device))
+    angle = math.radians(deg)
+    c, s = math.cos(-angle), math.sin(-angle)
+    rotation = torch.tensor([[c, -s], [s, c]], dtype=torch.float64)
+    footprint = reference @ rotation.T + torch.tensor([0.05, -0.02], dtype=torch.float64)
+    mirrored = footprint[LEG_PERM] * torch.tensor([1.0, -1.0])
+    bias = -math.atan2(12 * shear, 10 - 6 * shear**2)
+    assert twist_from_footprint(footprint).item() == pytest.approx(angle, rel=0, abs=1e-12)
+    assert twist_from_footprint(mirrored).item() == pytest.approx(-angle + bias, rel=0, abs=1e-12)
+    if shear:
+        assert abs(twist_from_footprint(mirrored).item() + angle) > 0.1
+    else:
+        assert twist_from_footprint(mirrored).item() == pytest.approx(-angle, rel=0, abs=1e-12)
+
+    mirrored_reference = reference[LEG_PERM] * torch.tensor([1.0, -1.0])
+    monkeypatch.setattr(state, "reference_footprint", lambda device: mirrored_reference.to(device))
+    assert twist_from_footprint(mirrored).item() == pytest.approx(-angle, rel=0, abs=1e-12)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -282,7 +341,7 @@ def test_the_ruler_does_not_change_length_as_the_ladder_widens() -> None:
     assert spread < 0.05, (
         f"the free score moves {spread:.1%} across the ladder, so a level changes "
         f"how strictly the posture is marked as well as how far it is asked to "
-        f"lean: {['%.4f' % s for s in scaled]}"
+        f"lean: {[f'{s:.4f}' for s in scaled]}"
     )
 
     pinned = [
@@ -741,7 +800,9 @@ def test_the_export_admits_posture_only_with_what_the_controller_needs() -> None
     law = {"stride": 0.072, "freq_min": 2.0, "freq_max": 5.56, "turn_radius": 0.2,
            "command_threshold": 0.05}
 
-    def contract(gait=law, posture={"neutral_height": 0.107}):
+    def contract(gait=law, posture=None):
+        if posture is None:
+            posture = {"neutral_height": 0.107}
         return {"obs_joint_order": ["a"], "observation": {"terms": [
             {"name": "gait_phase", "dim": 2, "params": dict(gait)},
             {"name": "posture_command", "dim": 4, "params": dict(posture)},
@@ -1683,7 +1744,7 @@ def test_the_landing_peak_is_reduced_by_max_and_not_by_mean() -> None:
 
     class _Env:
         step_dt = 0.01
-        scene = {"feet": _Sensor()}
+        scene: ClassVar[dict] = {"feet": _Sensor()}
 
     got = float(landing_force_max(_Env(), "feet")[0])
     assert got == pytest.approx(9.0), (
@@ -1733,7 +1794,7 @@ def test_the_landing_speed_is_read_before_the_impact_not_at_it() -> None:
 
     class _Env:
         num_envs, device, step_dt = 1, "cpu", 0.01
-        scene = {"feet": sensor, "robot": robot}
+        scene: ClassVar[dict] = {"feet": sensor, "robot": robot}
 
         class command_manager:
             @staticmethod
@@ -2067,8 +2128,8 @@ def test_a_term_cannot_stack_frames_twice_without_saying_so() -> None:
             history_frames = 5
 
     class _OM:
-        active_terms = {"actor": ["joint_pos"]}
-        _group_obs_term_cfgs = {"actor": [_Cfg()]}
+        active_terms: ClassVar[dict] = {"actor": ["joint_pos"]}
+        _group_obs_term_cfgs: ClassVar[dict] = {"actor": [_Cfg()]}
 
     class _Env:
         observation_manager = _OM()
@@ -2148,6 +2209,7 @@ def test_a_wrapped_term_gets_its_scene_entities_resolved() -> None:
     use_backend(resolve(backend="native", device="cpu", num_envs=2))
 
     from mjlab.envs import ManagerBasedRlEnv
+
     from tasks.jumper.common.constants import GAIT_JOINTS
 
     env = ManagerBasedRlEnv(cfg=cfg, device="cpu")
@@ -2222,10 +2284,10 @@ def test_the_curriculum_dwells_are_in_iterations_whatever_the_rollout_is() -> No
     # The four locomotion tasks are untouched: they run a 24-step rollout and the
     # shared default is correct for them. Changing it there would have been the
     # fix that broke three tasks to mend one.
-    from tasks.jumper.common.mdp.curriculum import CommandRangeCurriculum  # noqa: F401
     import inspect
 
     from tasks.jumper.common.mdp import curriculum as common_curriculum
+    from tasks.jumper.common.mdp.curriculum import CommandRangeCurriculum  # noqa: F401
 
     src = inspect.getsource(common_curriculum)
     assert "dwell_steps: int = 24 * 100" in src, (
@@ -2509,7 +2571,7 @@ def test_no_rung_is_climbed_before_an_episode_has_been_run() -> None:
 
         # Far inside every bar on every axis, so the only thing that can refuse a
         # promotion is a clock.
-        metrics = {
+        metrics: ClassVar[dict] = {
             f"error_{a}": torch.full((64,), 1e-4 * episode / (8.0 / 0.005))
             for a in axes
         }
@@ -2517,7 +2579,7 @@ def test_no_rung_is_climbed_before_an_episode_has_been_run() -> None:
     class _Rewards:
         def get_term_cfg(self, name):
             class T:
-                params: dict = {}
+                params: ClassVar[dict] = {}
 
             return T()
 
@@ -2529,7 +2591,7 @@ def test_no_rung_is_climbed_before_an_episode_has_been_run() -> None:
         reward_manager = _Rewards()
 
     class _Cfg:
-        params = {
+        params: ClassVar[dict] = {
             "angles": POSTURE_ANGLES,
             "heights": POSTURE_HEIGHTS,
             "stand_angles": POSTURE_STAND_ANGLES,
