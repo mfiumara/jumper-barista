@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -182,7 +182,12 @@ def main() -> int:
                               **kwargs)
 
     scenes.apply = apply
-    run_m4 = importlib.import_module("barista.verification.run_m4")
+    # Loaded by path: `barista/` is not an installed package (and nothing here
+    # rewrites sys.path -- tests/test_layout.py forbids it).
+    path = cc.REPO / "barista" / "verification" / "run_m4.py"
+    module_spec = importlib.util.spec_from_file_location("barista_run_m4", path)
+    run_m4 = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(run_m4)
     argv = ["run_m4.py", "--out", str(out), "--trajectory", str(trajectory),
             "--save-render-states"]
     if args.no_render:

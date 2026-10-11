@@ -10,6 +10,7 @@ M4 transfer replay) comes from the scripts in ``barista/cafe/``.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import math
 import sys
@@ -18,15 +19,24 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-REPO = Path(__file__).resolve().parents[1]
-CAFE = REPO / "barista" / "cafe"
-sys.path.insert(0, str(CAFE))
-
-import cafe_common as cc
-
 import scenes
 from scenes import cafe_bar
 from scenes.package import read_package
+
+REPO = Path(__file__).resolve().parents[1]
+CAFE = REPO / "barista" / "cafe"
+
+
+def _load(name: str):
+    """Load a barista/cafe script by path (barista/ is not an installed package)."""
+    spec = importlib.util.spec_from_file_location(name, CAFE / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module  # the scripts import cafe_common by name
+    spec.loader.exec_module(module)
+    return module
+
+
+cc = _load("cafe_common")
 
 COFFEE = REPO / "scenes" / "coffee_bar.scene"
 M4 = REPO / "barista" / "trajectory" / "m4_spiral_pour.json"
@@ -108,7 +118,7 @@ def test_pour_start_is_the_accepted_m4_start_moved_rigidly(dims) -> None:
 
 
 def test_the_m4_transfer_moves_only_world_frame_positions(dims) -> None:
-    from run_m4_transfer import transferred_trajectory
+    transferred_trajectory = _load("run_m4_transfer").transferred_trajectory
 
     original = json.loads(M4.read_text("utf-8"))
     moved = transferred_trajectory(dims["brew_station"]["compiled_offset_m"])
