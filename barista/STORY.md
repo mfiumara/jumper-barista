@@ -11,23 +11,26 @@ Keep it affectionate and charming, not a caricature.
 
 ## Story beats (target 30–45 s, plus a 15–20 s vertical cut)
 
-1. **Shift start.** Jumper stands on a low back counter behind the main bar and jumps up onto
-   the bar. *Stretch goal:* the jump policy rises about 0.16 m on flat ground, so landing on a
-   ledge needs new work and is not guaranteed. **Fallback:** a celebratory jump on the bar
-   itself.
-2. **Idle.** It does a silly dance (reuse the existing dance policies) while waiting.
-3. **Customer arrives.** We hear the customer's voice. Jumper stops dancing, turns or looks up
-   at the customer and listens. The customer is the camera (point of view at bar height); there
-   is no 3D human.
-4. **Takes the order.** Real speech-to-text (whisper.cpp / mlx-whisper, local) on the
+1. **Idle on the bar.** Jumper is already on the bar, doing a silly dance while it waits
+   (reuse the existing dance policies).
+2. **Door chime.** A café door chime ("ding!") plays as the customer walks in, off-camera.
+3. **Excited jump.** Jumper stops dancing and **jumps in place out of excitement** (reuse the
+   existing flat jump), lands, and says *"Oh, a customer!"* in the cute Italian voice (for
+   example *"Ah! Un cliente!"*). The eyes go happy or surprised. **This beat replaces the
+   back-counter ledge jump, which is dropped.**
+4. **Listens.** Jumper turns or looks up at the customer (the camera, point of view at bar
+   height; no 3D human). The customer orders a pour-over.
+5. **Takes the order.** Real speech-to-text (whisper.cpp / mlx-whisper, local) on the
    customer's audio, then an intent parser. The subtitles show the actual transcript.
-5. **Confirms.** Jumper says something like *"Order noted — I prepare it now!"* in the cute
-   Italian voice, and the eye displays change expression.
-6. **Turns 90° and walks along the bar** to the pour-over station (reuse the existing walking
-   policy), then aligns and blends into the accepted pour's start pose.
-7. **The spiral pour** (accepted M4), polished: warm café lighting, a visible water stream, a
+6. **Confirms.** *"Order noted — I prepare it now!"* in the Italian voice, with an eye
+   expression.
+7. **Turns 90° and walks along the bar** to the pour-over station (existing walking policy),
+   then aligns and blends into the accepted pour's start pose.
+8. **The spiral pour** (accepted M4), polished: warm café lighting, a visible water stream, a
    coffee-coloured bed, a V60 that reads as a V60.
-8. Optional button at the end: a proud gesture or bow.
+9. Optional button at the end: a proud gesture or bow.
+
+The chime is a royalty-free or CC0 sound effect, with its licence recorded in `SOURCES.md`.
 
 ## Voices
 
@@ -55,9 +58,9 @@ evidence in `SOURCES.md`.
 
 | # | Milestone | Target |
 |---|---|---|
-| A1 | Café scene: back counter + bar + brew station; walking route; spawn and collision checks | 2026-10-14 |
+| A1 | Café scene: bar + brew station (+ door off-camera); walking route; spawn and collision checks | 2026-10-14 |
 | A2 | Outfit concepts presented to Mattia (gate), then the chosen skin built and rendered | concepts by 10-13, skin by 10-17 |
 | A3 | Voice pipeline: provider preflight (gate), customer + Jumper lines, STT transcript, eye expressions | 2026-10-16 |
-| A4 | Motion chain: (jump) → dance → stop/look → turn 90° → walk → align → pour, as one continuous sim run within the torque budget | 2026-10-19 |
+| A4 | Motion chain: dance → chime → jump in place → look → turn 90° → walk → align → pour, as one continuous sim run within the torque budget | 2026-10-19 |
 | A5 | Film: horizontal 30–45 s + vertical 15–20 s, music, subtitles, small simulation note | 2026-10-22 |
 | A6 | Independent review; Mattia's taste review (gate) | 2026-10-24 |
