@@ -21,9 +21,9 @@ the claw where the keyframe would have put it had the robot stood at ``base_star
 Set-down servo (optional, ``set_down_servo`` in the trajectory). The pitcher creeps a few
 millimetres in the claw while it is carried, so lowering the *claw* onto the pickup spot puts
 the *pitcher* down that far off it. During ``lower`` the measured pitcher origin (its current
-offset in the measured palm frame) is placed where the keyframe would put it with the grip
-as it was at pickup (the offset recorded at the first ``lift_hold`` tick), ramped in over
-``ramp_s`` so the claw never steps. This servo runs in the nominal stance as well.
+offset in the measured palm frame) is servoed in x/y onto the pickup spot ``target_m`` (the
+keyframe keeps the height), with a small clamped integral on the measured error, ramped in
+over ``ramp_s`` so the claw never steps. This servo runs in the nominal stance as well.
 
 With the robot exactly at ``base_start`` (``D`` within :data:`IDENTITY_TOLERANCE`) the
 keyframes are returned unchanged, bit for bit, so the nominal replay is the accepted one.
@@ -162,6 +162,7 @@ class StanceRetarget:
         self.pickup_pitcher_in_palm: np.ndarray | None = None
         self.lower_start_s: float | None = None
         self.max_set_down_shift_m = 0.0
+        self.set_down_integral = np.zeros(2)
         self.max_residual_m = 0.0
         self.max_correction_rad = 0.0
         self.solve_count = 0
@@ -196,7 +197,8 @@ class StanceRetarget:
         self.mujoco.mj_jac(self.model, self.scratch, jacp, jacr, point, self.palm)
         return jacp[:, self.vadr], jacr[:, self.vadr]
 
-    def _solve(self, qpos, arm0, *, point_in_palm, point_target, rot_target) -> np.ndarray:
+    def _solve(self, qpos, arm0, *, point_in_palm, point_target, rot_target,
+               orientation_weight: float = ORIENTATION_WEIGHT_M_PER_RAD) -> np.ndarray:
         arm = np.asarray(arm0, dtype=np.float64).copy()
         for _ in range(IK_ITERATIONS):
             self._set(qpos, arm)
@@ -206,12 +208,12 @@ class StanceRetarget:
             _, jacr = self._jacobian(palm_pos)
             rows = [
                 POSITION_WEIGHT * jacp,
-                ORIENTATION_WEIGHT_M_PER_RAD * jacr,
+                orientation_weight * jacr,
                 REGULARISATION_M_PER_RAD * np.eye(len(arm)),
             ]
             errors = [
                 POSITION_WEIGHT * (point_target - point),
-                ORIENTATION_WEIGHT_M_PER_RAD * rot_log(rot_target @ palm_rot.T),
+                orientation_weight * rot_log(rot_target @ palm_rot.T),
                 REGULARISATION_M_PER_RAD * (np.asarray(arm0) - arm),
             ]
             step, *_ = np.linalg.lstsq(np.vstack(rows), np.concatenate(errors), rcond=None)
@@ -252,16 +254,27 @@ class StanceRetarget:
             fraction = fraction * fraction * (3.0 - 2.0 * fraction)
             self._set(qpos, arm)
             palm_pos, palm_rot = self._palm()
-            keyframe_point = palm_pos + palm_rot @ pitcher_in_palm
-            pickup_point = palm_pos + palm_rot @ self.pickup_pitcher_in_palm
-            shifted = keyframe_point + fraction * (pickup_point - keyframe_point)
+            keyframe_point = self.offset.to_nominal_point(palm_pos + palm_rot @ pitcher_in_palm)
+            # The pickup spot is fixed in the world: servo the measured pitcher origin onto
+            # it in x/y (the keyframe keeps the height), with a small clamped integral on the
+            # measured error so the hanging pitcher lands on it rather than near it.
+            spot = np.asarray(self.set_down_servo["target_m"][:2], dtype=np.float64)
+            error = spot - np.asarray(data.xpos[self.pitcher][:2], dtype=np.float64)
+            dt = float(self.set_down_servo.get("control_dt_s", 0.02))
+            clamp = float(self.set_down_servo.get("integral_clamp_m", 0.015))
+            self.set_down_integral = np.clip(
+                self.set_down_integral + float(self.set_down_servo.get("ki", 2.0)) * dt * error,
+                -clamp, clamp,
+            )
+            shifted = keyframe_point.copy()
+            shifted[:2] += fraction * (spot - keyframe_point[:2] + self.set_down_integral)
             self.max_set_down_shift_m = max(
-                self.max_set_down_shift_m, float(np.linalg.norm(pickup_point - keyframe_point))
+                self.max_set_down_shift_m, float(np.linalg.norm(spot - keyframe_point[:2]))
             )
             return self._solve(
-                qpos, arm, point_in_palm=pitcher_in_palm,
-                point_target=self.offset.to_nominal_point(shifted),
+                qpos, arm, point_in_palm=pitcher_in_palm, point_target=shifted,
                 rot_target=self.offset.to_nominal_rotation(palm_rot),
+                orientation_weight=float(self.set_down_servo.get("orientation_weight", 0.01)),
             )
         if phase in SPOUT_PHASES:
             point_in_palm = measured_rot.T @ (data.site_xpos[self.spout] - measured_palm)

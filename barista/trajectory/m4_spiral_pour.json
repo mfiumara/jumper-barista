@@ -57,8 +57,8 @@
     "scale": 2.0,
     "raise_start": 4.0,
     "raise_end": 6.0,
-    "lower_start": 44.5,
-    "lower_end": 47.5
+    "lower_start": 41.0,
+    "lower_end": 44.0
   },
   "keyframes": [
     {
@@ -129,7 +129,7 @@
     },
     {
       "phase": "transit",
-      "end_s": 21.5,
+      "end_s": 20.0,
       "arm_rad": [
         -0.976208,
         -2.349539,
@@ -140,7 +140,7 @@
     },
     {
       "phase": "pour_in",
-      "end_s": 22.6,
+      "end_s": 21.1,
       "arm_rad": [
         -0.36261413315871194,
         -2.560378861541305,
@@ -151,7 +151,7 @@
     },
     {
       "phase": "pour_in",
-      "end_s": 23.5,
+      "end_s": 22.0,
       "arm_rad": [
         -0.2208904024504199,
         -2.7950473031327503,
@@ -162,7 +162,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 23.95,
+      "end_s": 22.4,
       "arm_rad": [
         -0.21460045956765023,
         -2.790433031084873,
@@ -173,7 +173,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 24.4,
+      "end_s": 22.8,
       "arm_rad": [
         -0.2204097535626482,
         -2.794273202441555,
@@ -184,7 +184,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 24.85,
+      "end_s": 23.2,
       "arm_rad": [
         -0.23182671868805713,
         -2.7952319899147158,
@@ -195,7 +195,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 25.3,
+      "end_s": 23.6,
       "arm_rad": [
         -0.2492927608012574,
         -2.7960411919408,
@@ -206,7 +206,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 25.75,
+      "end_s": 24.0,
       "arm_rad": [
         -0.2673773263581967,
         -2.7966390088342497,
@@ -217,7 +217,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 26.2,
+      "end_s": 24.4,
       "arm_rad": [
         -0.27953205732371644,
         -2.7969724302106465,
@@ -228,7 +228,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 26.65,
+      "end_s": 24.8,
       "arm_rad": [
         -0.28157210382530845,
         -2.7980926229262364,
@@ -239,7 +239,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 27.1,
+      "end_s": 25.2,
       "arm_rad": [
         -0.2689318374455522,
         -2.7998311567397094,
@@ -250,7 +250,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 27.55,
+      "end_s": 25.6,
       "arm_rad": [
         -0.2547104008202012,
         -2.801462442340224,
@@ -261,7 +261,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 28.0,
+      "end_s": 26.0,
       "arm_rad": [
         -0.23749354951078555,
         -2.8020583781650026,
@@ -272,7 +272,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 28.45,
+      "end_s": 26.4,
       "arm_rad": [
         -0.21155772605494955,
         -2.803162820818711,
@@ -283,7 +283,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 28.9,
+      "end_s": 26.8,
       "arm_rad": [
         -0.1904900335931161,
         -2.8048912344472416,
@@ -294,7 +294,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 29.35,
+      "end_s": 27.2,
       "arm_rad": [
         -0.1957149956879585,
         -2.807344620662731,
@@ -305,7 +305,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 29.8,
+      "end_s": 27.6,
       "arm_rad": [
         -0.21650463132413936,
         -2.8081466934966435,
@@ -316,7 +316,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 30.25,
+      "end_s": 28.0,
       "arm_rad": [
         -0.25090905890093573,
         -2.8080349641113442,
@@ -327,7 +327,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 30.7,
+      "end_s": 28.4,
       "arm_rad": [
         -0.28828807015935864,
         -2.807465033515085,
@@ -338,7 +338,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 31.15,
+      "end_s": 28.8,
       "arm_rad": [
         -0.31511043845494147,
         -2.8064084206367332,
@@ -349,7 +349,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 31.6,
+      "end_s": 29.2,
       "arm_rad": [
         -0.322130486984908,
         -2.8045203131085787,
@@ -360,7 +360,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 32.05,
+      "end_s": 29.6,
       "arm_rad": [
         -0.30256636362105477,
         -2.8035915049814752,
@@ -371,7 +371,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 32.5,
+      "end_s": 30.0,
       "arm_rad": [
         -0.2741970402095771,
         -2.8048288120133655,
@@ -382,7 +382,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 32.95,
+      "end_s": 30.4,
       "arm_rad": [
         -0.24817900198654472,
         -2.805217541500247,
@@ -393,7 +393,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 33.4,
+      "end_s": 30.8,
       "arm_rad": [
         -0.21271297737013417,
         -2.805566250270318,
@@ -404,7 +404,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 33.85,
+      "end_s": 31.2,
       "arm_rad": [
         -0.17398439561260778,
         -2.809191894997072,
@@ -415,7 +415,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 34.3,
+      "end_s": 31.6,
       "arm_rad": [
         -0.16473293026181612,
         -2.8134392728492936,
@@ -426,7 +426,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 34.75,
+      "end_s": 32.0,
       "arm_rad": [
         -0.18748779157008508,
         -2.8151118929991994,
@@ -437,7 +437,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 35.2,
+      "end_s": 32.4,
       "arm_rad": [
         -0.23430561109341452,
         -2.814636575399463,
@@ -448,7 +448,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 35.65,
+      "end_s": 32.8,
       "arm_rad": [
         -0.29323948098602237,
         -2.8133785245510086,
@@ -459,7 +459,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 36.1,
+      "end_s": 33.2,
       "arm_rad": [
         -0.3415581338024835,
         -2.811886311142552,
@@ -470,7 +470,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 36.55,
+      "end_s": 33.6,
       "arm_rad": [
         -0.36145502243807204,
         -2.8088421790708296,
@@ -481,7 +481,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 37.0,
+      "end_s": 34.0,
       "arm_rad": [
         -0.3444669574613736,
         -2.8032900647457373,
@@ -492,7 +492,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 37.45,
+      "end_s": 34.4,
       "arm_rad": [
         -0.3011718251277825,
         -2.7982893736890273,
@@ -503,7 +503,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 37.9,
+      "end_s": 34.8,
       "arm_rad": [
         -0.26328411820234415,
         -2.799651519185599,
@@ -514,7 +514,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 38.35,
+      "end_s": 35.2,
       "arm_rad": [
         -0.2214857170590414,
         -2.7961263774855563,
@@ -525,7 +525,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 38.8,
+      "end_s": 35.6,
       "arm_rad": [
         -0.1687685296501239,
         -2.805246098380562,
@@ -536,7 +536,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 39.25,
+      "end_s": 36.0,
       "arm_rad": [
         -0.13603477130818128,
         -2.8150763402825847,
@@ -547,7 +547,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 39.7,
+      "end_s": 36.4,
       "arm_rad": [
         -0.1498271506618315,
         -2.81965779726143,
@@ -558,7 +558,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 40.15,
+      "end_s": 36.8,
       "arm_rad": [
         -0.20035347336735115,
         -2.8195276911305323,
@@ -569,7 +569,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 40.6,
+      "end_s": 37.2,
       "arm_rad": [
         -0.27883105829211857,
         -2.817412358103005,
@@ -580,7 +580,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 41.05,
+      "end_s": 37.6,
       "arm_rad": [
         -0.35437321143051026,
         -2.8156738654414193,
@@ -591,7 +591,7 @@
     },
     {
       "phase": "spiral",
-      "end_s": 41.5,
+      "end_s": 38.0,
       "arm_rad": [
         -0.3961915246917335,
         -2.81276725061996,
@@ -602,7 +602,7 @@
     },
     {
       "phase": "pour_out",
-      "end_s": 42.0,
+      "end_s": 38.5,
       "arm_rad": [
         -0.45624961278500853,
         -2.6011952526482265,
@@ -613,7 +613,7 @@
     },
     {
       "phase": "pour_out",
-      "end_s": 42.75,
+      "end_s": 39.25,
       "arm_rad": [
         -0.4900718060589012,
         -2.2630149334871397,
@@ -624,7 +624,7 @@
     },
     {
       "phase": "pour_out",
-      "end_s": 43.5,
+      "end_s": 40.0,
       "arm_rad": [
         -0.5487289065701823,
         -2.018442878012566,
@@ -635,7 +635,7 @@
     },
     {
       "phase": "return",
-      "end_s": 44.0,
+      "end_s": 40.5,
       "arm_rad": [
         -0.5487289065701823,
         -2.018442878012566,
@@ -646,7 +646,7 @@
     },
     {
       "phase": "lower",
-      "end_s": 47.0,
+      "end_s": 43.5,
       "arm_rad": [
         -0.5236,
         -1.8,
@@ -657,7 +657,7 @@
     },
     {
       "phase": "set_down",
-      "end_s": 48.0,
+      "end_s": 44.5,
       "arm_rad": [
         -0.5236,
         -1.8,
@@ -668,7 +668,7 @@
     },
     {
       "phase": "release",
-      "end_s": 50.0,
+      "end_s": 46.5,
       "arm_rad": [
         -0.5236,
         -1.8,
@@ -679,7 +679,7 @@
     },
     {
       "phase": "clear_retreat",
-      "end_s": 52.0,
+      "end_s": 48.5,
       "arm_rad": [
         -0.535,
         -1.98,
@@ -690,7 +690,7 @@
     },
     {
       "phase": "retreat",
-      "end_s": 54.0,
+      "end_s": 50.5,
       "arm_rad": [
         -0.55,
         -2.5878028667900996,
@@ -701,7 +701,7 @@
     },
     {
       "phase": "final_settle",
-      "end_s": 57.0,
+      "end_s": 53.5,
       "arm_rad": [
         -0.55,
         -2.5878028667900996,
@@ -768,5 +768,27 @@
     "maximum_horizontal_launch_speed_m_s": 0.2,
     "minimum_brewer_clearance_m": 0.0
   },
-  "set_down_note": "pitcher returns to its pickup spot: upright pour-out pose, lower to the grasp pose while the body lowers (44.5-47.5 s), contact-triggered release; the open claw then lifts straight up from its measured contact pose (clear_retreat blends from the held set-down arm, J1 only, no yaw) so the palm separates without dragging the released pitcher, then rises clear"
+  "set_down_note": "pitcher returns to its pickup spot: upright pour-out pose, lower to the grasp pose while the body lowers (44.5-47.5 s), contact-triggered release; the open claw then lifts straight up from its measured contact pose (clear_retreat blends from the held set-down arm, J1 only, no yaw) so the palm separates without dragging the released pitcher, then rises clear",
+  "grip_squeeze_lead_rad": 0.11,
+  "set_down_servo": {
+    "ramp_s": 1.5,
+    "target_m": [
+      0.168255,
+      0.190982,
+      -0.002
+    ],
+    "ki": 2.0,
+    "integral_clamp_m": 0.015,
+    "control_dt_s": 0.02,
+    "orientation_weight": 0.01
+  },
+  "spiral_radius_scale": {
+    "scale": 0.85,
+    "centre_m": [
+      0.0934,
+      0.32
+    ],
+    "blend_out_s": 0.5
+  },
+  "m4r_note": "M4R margins (simulation only): 1 kHz physics / 50 Hz targets; transit shortened 4.0->2.5 s and the spiral time-scaled 17.5->16.0 s (same keyframes, less carried time for the grip to creep); grip squeeze lead 0.06->0.11 rad (claw preload 0.6->1.1 N m, under the 1.2 N m continuous rating; torque audit gates it); spiral radius scaled 0.85 about the bed centre by IK on the measured spout (more pitcher-to-head clearance, less inward excursion); set-down servo of the measured pitcher onto its pickup spot during lower. No gate threshold changed."
 }
