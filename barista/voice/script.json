@@ -1,0 +1,49 @@
+{
+  "schema": "jumper-barista-script/1",
+  "note": "Default lines for the order scene (barista/STORY.md beats 3-6). Taste may change the text at Mattia's gate. Line order is the order of the scene.",
+  "lines": [
+    {
+      "id": "exclaim",
+      "speaker": "jumper",
+      "text": "Ah! Un cliente!",
+      "alternatives": ["Oh, a customer!"],
+      "eye_expression": "surprised"
+    },
+    {
+      "id": "order",
+      "speaker": "customer",
+      "text": "Ciao Jumper! Could I get a V60 pour-over, please?",
+      "eye_expression": "listening",
+      "expected_intent": {"intent": "order_drink", "drink": "v60_pour_over"}
+    },
+    {
+      "id": "confirm",
+      "speaker": "jumper",
+      "text": "Order noted \u2014 I prepare it now!",
+      "eye_expression": "happy"
+    }
+  ],
+  "optional_lines": [
+    {
+      "id": "greet",
+      "speaker": "jumper",
+      "text": "Ciao! Buongiorno! What can I make for you?",
+      "eye_expression": "happy",
+      "after": "exclaim"
+    }
+  ],
+  "voices": {
+    "placeholder-local": {
+      "jumper": {"voice": "Alice", "rate_wpm": 175, "lead_in_ms": 300, "tail_ms": 200},
+      "customer": {"voice": "Karen", "rate_wpm": 175, "lead_in_ms": 400, "tail_ms": 300}
+    },
+    "elevenlabs": {
+      "jumper": {"voice_id": null, "model_id": "eleven_multilingual_v2"},
+      "customer": {"voice_id": null, "model_id": "eleven_multilingual_v2"}
+    },
+    "fish_audio": {
+      "jumper": {"reference_id": null},
+      "customer": {"reference_id": null}
+    }
+  }
+}
