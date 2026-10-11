@@ -20,7 +20,9 @@
       "id": "confirm",
       "speaker": "jumper",
       "text": "Order noted \u2014 I prepare it now!",
-      "eye_expression": "happy"
+      "eye_expression": "happy",
+      "eye_expression_end": "wink",
+      "eye_end_lead_s": 0.6
     }
   ],
   "optional_lines": [
@@ -42,8 +44,22 @@
       "customer": {"voice_id": null, "model_id": "eleven_multilingual_v2"}
     },
     "fish_audio": {
-      "jumper": {"reference_id": null},
-      "customer": {"reference_id": null}
+      "jumper": {
+        "name": "jumper-designed-b",
+        "instruction": "small robot, bright and friendly, mild Italian accent, slightly synthetic",
+        "seed": 6060,
+        "n": 2,
+        "language": null,
+        "speed": 1.0
+      },
+      "customer": {
+        "name": "customer-designed-neutral-en",
+        "instruction": "neutral, clear adult English speaker, relaxed caf\u00e9 tone",
+        "seed": 4242,
+        "n": 4,
+        "language": "en",
+        "speed": 1.0
+      }
     }
   }
 }

@@ -36,15 +36,29 @@ python barista/character/eyes.py m4-hash-check --out DIR   # ~2-3 min, native:cp
 | name | what | network | cost |
 |---|---|---|---|
 | `placeholder-local` | macOS `say` to a 22.05 kHz 16-bit mono WAV (Jumper: `Alice`, it_IT; customer: `Karen`) | none | free |
-| `elevenlabs` | stub until A3b | refused | credits |
-| `fish_audio` | stub until A3b | refused | credits |
+| `fish_audio` | Fish Audio Voice Design `voice-design-1`, one request per line (A3b, Mattia's approved provider) | `api.fish.audio` | $0.01/request, $3 cap |
+| `elevenlabs` | stub (not the approved provider) | refused | credits |
 
 `providers.get_provider(name, allow_spend=...)` is the only switch; the pipeline, manifest
 and film do not change with the provider. A paid provider refuses unless **both**
 `--allow-spend` is passed **and** its key is present (`ELEVENLABS_API_KEY`;
 `FISH_API_KEY` or `FISH_AUDIO_API_KEY`) in the environment or in the engineer profile's
-`.env`. With both present it still stops with `NotImplementedError`: the request itself is
-A3b, after Mattia's provider/budget gate (`PROVIDER_PREFLIGHT.md`). Keys are never printed.
+`.env`. ElevenLabs then still stops with `NotImplementedError`. Keys are never printed.
+
+### Fish Audio (A3b)
+
+```bash
+python -m barista.voice.pipeline --out /path/outside/the/repo/voice --provider fish_audio --allow-spend
+```
+
+Before any request the pipeline reads the wallet (`GET /wallet/self/api-credit`, free) and
+refuses (exit 3) when the credit cannot cover one `voice-design-1` request per line, or when
+`barista/voice/fish_audio_spend.json` (the committed ledger of billed requests) plus the
+batch would pass the **$3 cap**; every single request is checked against the cap again. The
+voices are designed, not cloned: the approved instruction prompts and fixed seeds in
+`script.json`, the line itself as `reference_text`, no reference audio. All candidates are
+kept as `audio/<id>.candN.wav`; see `pipeline.py` for which one is used. The manifest then
+also carries `generation` per line and `spend` (wallet before/after, ledger totals, cap).
 
 The customer placeholder voice was chosen by measurement, not taste: whisper.cpp
 `base.en` heard Samantha and Alex as "Child jumper", Karen as "Ciao Jumper" at 165, 175
@@ -86,13 +100,22 @@ A5 (the film) consumes this; keep it stable. Additive top-level fields are allow
                                    // never hand-written; jumper lines: null
       "intent": {"intent": "order_drink", "drink": "v60_pour_over",
                  "matched": "v60", "order_cue": true},   // customer lines; jumper: null
-      "eye_expression": "listening"  // neutral | surprised | listening | happy | wink
+      "eye_expression": "listening",  // neutral | surprised | listening | happy | wink
+      "eye_keyframes": [[0.0, "listening"]],  // [t_s from line start, expression]; the
+                                   // confirm line ends [[0.0,"happy"],[dur-0.6,"wink"]]
+      "audio_sha256": "...",
+      "generation": null,          // paid providers: model, instruction, seed, usd, ...
+      "stt_candidates": [ ... ]    // customer line: every candidate's transcript + intent
     }
   ],
   "checks": [ {"line": "order", "check": "...", "pass": true, ...} ],
-  "passes": true
+  "passes": true,
+  "spend": {...}                   // paid providers only: wallet before/after, usd, cap
 }
 ```
+
+`pipeline.validate_manifest(manifest, root)` lists contract violations; the CLI prints them
+and exits 2 if there are any.
 
 Subtitles must show `transcript` for the customer line (STORY beat 5), not `text`.
 

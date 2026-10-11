@@ -141,15 +141,16 @@ def test_a_key_without_allow_spend_is_still_refused(no_network, tmp_path, monkey
     for name in ("elevenlabs", "fish_audio"):
         with pytest.raises(providers.SpendRefused, match="costs credits"):
             providers.get_provider(name, env_file=env).synthesize("hi", {}, tmp_path / "x.wav")
-        # Both gates open: still no request in A3a.
-        with pytest.raises(NotImplementedError, match="A3b"):
-            providers.get_provider(name, allow_spend=True, env_file=env).synthesize(
-                "hi", {}, tmp_path / "x.wav"
-            )
+    # ElevenLabs is not the approved provider: both gates open still sends nothing.
+    with pytest.raises(NotImplementedError, match="not the approved provider"):
+        providers.get_provider("elevenlabs", allow_spend=True, env_file=env).synthesize(
+            "hi", {}, tmp_path / "x.wav"
+        )
     assert not no_network
 
 
 def test_providers_module_imports_no_network_library():
+    """Network code lives only in fish_audio.py, which providers imports lazily."""
     tree = ast.parse((VOICE / "providers.py").read_text("utf-8"))
     imported = set()
     for node in ast.walk(tree):
@@ -191,11 +192,220 @@ def test_script_lines_and_eye_vocabulary():
     assert set(pipeline.EYE_EXPRESSIONS) == set(_eyes().EXPRESSIONS)
     for provider in ("placeholder-local", "elevenlabs", "fish_audio"):
         assert set(script["voices"][provider]) == {"jumper", "customer"}
+    assert lines[2]["eye_expression_end"] == "wink"
+    # Mattia's gate (t_0bfa02ac): the approved Voice Design prompts, verbatim.
+    fish = script["voices"]["fish_audio"]
+    assert fish["jumper"]["instruction"] == (
+        "small robot, bright and friendly, mild Italian accent, slightly synthetic")
+    assert fish["customer"]["instruction"] == (
+        "neutral, clear adult English speaker, relaxed caf\u00e9 tone")
+    assert all(isinstance(v["seed"], int) and 1 <= v["n"] <= 4 for v in fish.values())
 
 
+def test_eye_keyframes_end_the_confirm_line_in_a_wink():
+    pipeline = _voice("pipeline")
+    script = json.loads((VOICE / "script.json").read_text("utf-8"))
+    exclaim, order, confirm = pipeline.select_lines(script, [], [])
+    assert pipeline.eye_keyframes(exclaim, 1.2) == [[0.0, "surprised"]]
+    assert pipeline.eye_keyframes(order, 3.0) == [[0.0, "listening"]]
+    assert pipeline.eye_keyframes(confirm, 2.5) == [[0.0, "happy"], [1.9, "wink"]]
+    assert pipeline.eye_keyframes(confirm, 0.3) == [[0.0, "happy"], [0.0, "wink"]]
+
+
+def test_validate_manifest_catches_contract_breaks():
+    pipeline = _voice("pipeline")
+    good = {
+        "schema": "jumper-barista-voice/1",
+        "lines": [
+            {"id": "order", "speaker": "customer", "text": "t", "audio_path": "a.wav",
+             "duration_s": 2.0, "sample_rate": 44100, "provider": "fish_audio",
+             "transcript": "heard", "intent": {"drink": "v60_pour_over"},
+             "eye_expression": "listening", "eye_keyframes": [[0.0, "listening"]]},
+            {"id": "confirm", "speaker": "jumper", "text": "t", "audio_path": "b.wav",
+             "duration_s": 2.0, "sample_rate": 44100, "provider": "fish_audio",
+             "transcript": None, "intent": None, "eye_expression": "happy",
+             "eye_keyframes": [[0.0, "happy"], [1.4, "wink"]]},
+        ],
+        "checks": [{"pass": True}],
+        "passes": True,
+    }
+    assert pipeline.validate_manifest(good) == []
+    bad = json.loads(json.dumps(good))
+    bad["lines"][1]["eye_keyframes"][1] = [3.0, "wink"]
+    bad["lines"][0]["transcript"] = None
+    bad["passes"] = False
+    errors = pipeline.validate_manifest(bad)
+    assert len(errors) == 3, errors
+
+
+# --------------------------------------------------------------------------- fish audio
+
+_DUMMY_KEY = "dummy-fish-key-must-never-be-written"
 _HAVE_LOCAL_SPEECH = (
     shutil.which("say") and shutil.which("whisper-cli") and shutil.which("ffmpeg")
 )
+
+
+class _FakeFish:
+    """Stands in for urllib.request.urlopen: a wallet and a voice-design endpoint."""
+
+    def __init__(self, credit="1.00", wav_for=None):
+        self.credit = float(credit)
+        self.wav_for = wav_for or (lambda text, index: _tone_wav(0.5 + 0.1 * index))
+        self.requests = []
+
+    def __call__(self, request, timeout=None):
+        import base64
+        import io
+
+        assert request.get_header("Authorization") == "Bearer " + _DUMMY_KEY
+        self.requests.append((request.get_method(), request.full_url))
+        if request.full_url.endswith("/wallet/self/api-credit"):
+            body = {"credit": f"{self.credit:.4f}", "cumulative_top_up": "5", "_id": "x"}
+        else:
+            assert request.get_header("Model") == "voice-design-1"
+            payload = json.loads(request.data)
+            assert set(payload) <= {"instruction", "reference_text", "language", "n", "speed",
+                                    "num_step", "guidance_scale", "seed"}
+            self.credit -= 0.01
+            body = {"candidates": [
+                {"id": f"c{i}", "index": i, "sample_rate": 44100, "duration_ms": 500,
+                 "audio_base64": base64.b64encode(
+                     self.wav_for(payload["reference_text"], i)).decode()}
+                for i in range(payload["n"])]}
+
+        class _Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        return _Response(json.dumps(body).encode())
+
+
+def _tone_wav(seconds: float, rate: int = 44100) -> bytes:
+    import io
+    import wave
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        t = np.arange(int(seconds * rate)) / rate
+        handle.writeframes((3000 * np.sin(2 * np.pi * 220 * t)).astype("<i2").tobytes())
+    return buffer.getvalue()
+
+
+def _fish(tmp_path, monkeypatch, fake, cap=None):
+    providers = _voice("providers")
+    fish_audio = _voice("fish_audio")
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", _DUMMY_KEY)
+    provider = providers.get_provider("fish_audio", allow_spend=True, env_file=None,
+                                      ledger_path=tmp_path / "ledger.json", opener=fake)
+    if cap is not None:
+        provider.ledger.cap_usd = cap
+    return providers, fish_audio, provider
+
+
+def test_fish_audio_zero_credit_refuses_before_any_generation(no_network, tmp_path,
+                                                               monkeypatch):
+    fake = _FakeFish(credit="0")
+    providers, _, provider = _fish(tmp_path, monkeypatch, fake)
+    with pytest.raises(providers.SpendRefused, match="credit is \\$0.0000"):
+        provider.preflight(3)
+    assert fake.requests == [("GET", "https://api.fish.audio/wallet/self/api-credit")]
+    pipeline = _voice("pipeline")
+    fake.requests.clear()
+    with pytest.raises(providers.SpendRefused):
+        pipeline.run(tmp_path / "out", "fish_audio", True,
+                     provider_kwargs={"env_file": None, "ledger_path": tmp_path / "l.json",
+                                      "opener": fake})
+    assert all(url.endswith("api-credit") for _, url in fake.requests)
+    assert not (tmp_path / "out").exists() and not (tmp_path / "l.json").exists()
+    assert not no_network
+
+
+def test_fish_audio_cap_is_enforced_before_the_request(no_network, tmp_path, monkeypatch):
+    fake = _FakeFish(credit="5")
+    providers, fish_audio, provider = _fish(tmp_path, monkeypatch, fake, cap=0.025)
+    voice = {"instruction": "x", "seed": 1, "n": 2, "name": "v"}
+    provider.synthesize("Ah! Un cliente!", voice, tmp_path / "a" / "exclaim.wav", "exclaim")
+    provider.synthesize("Ah! Un cliente!", voice, tmp_path / "a" / "exclaim.wav", "exclaim")
+    sent = len(fake.requests)
+    with pytest.raises(providers.SpendRefused, match="exceed"):
+        provider.synthesize("third", voice, tmp_path / "a" / "x.wav", "x")
+    assert len(fake.requests) == sent  # refused without sending
+    with pytest.raises(providers.SpendRefused, match="exceed"):
+        provider.preflight(1)
+    ledger = json.loads((tmp_path / "ledger.json").read_text())
+    assert ledger["total_usd"] == pytest.approx(0.02)
+    assert [r["line_id"] for r in ledger["requests"]] == ["exclaim", "exclaim"]
+    assert fish_audio.request_price("s2.1-pro", "Ah! Un cliente!") == pytest.approx(15 * 15e-6)
+    assert sorted(p.name for p in (tmp_path / "a").iterdir()) == [
+        "exclaim.cand0.wav", "exclaim.cand1.wav", "exclaim.wav"]
+    assert not no_network
+
+
+def test_fish_audio_http_errors_never_echo_the_key(no_network, tmp_path, monkeypatch):
+    import io
+    import urllib.error
+
+    def failing(request, timeout=None):
+        raise urllib.error.HTTPError(request.full_url, 402, "Payment Required", {},
+                                     io.BytesIO(b'{"status":402,"message":"no credit"}'))
+
+    _, fish_audio, provider = _fish(tmp_path, monkeypatch, failing)
+    with pytest.raises(fish_audio.FishAudioError) as caught:
+        provider.synthesize("hi", {"instruction": "x", "seed": 1}, tmp_path / "x.wav", "x")
+    assert "402" in str(caught.value) and _DUMMY_KEY not in str(caught.value)
+    assert not (tmp_path / "ledger.json").exists()  # failed requests are not billed
+    assert not no_network
+
+
+@pytest.mark.skipif(not _HAVE_LOCAL_SPEECH, reason="needs say, whisper-cli, ffmpeg")
+def test_fish_audio_pipeline_offline_with_a_fake_server(no_network, tmp_path, monkeypatch):
+    """Full pipeline against a fake Fish Audio whose 'candidates' are `say` renders.
+
+    Customer candidate 0 says the wrong drink, candidate 1 the right one: the pipeline must
+    keep candidate 1 and record both transcripts. No key value may reach any output.
+    """
+    stt = _voice("stt")
+    if not stt.default_model().is_file():
+        pytest.skip("whisper model not downloaded")
+    providers = _voice("providers")
+    say = providers.PlaceholderLocal()
+
+    def wav_for(text, index):
+        if text.startswith("Ciao") and index == 0:
+            text = "Ciao Jumper! Could I get an espresso, please?"
+        path = tmp_path / "say" / f"{abs(hash((text, index)))}.wav"
+        say.synthesize(text, {"voice": "Karen", "rate_wpm": 175}, path)
+        return path.read_bytes()
+
+    fake = _FakeFish(credit="5", wav_for=wav_for)
+    monkeypatch.setenv("FISH_AUDIO_API_KEY", _DUMMY_KEY)
+    pipeline = _voice("pipeline")
+    out = tmp_path / "voice"
+    manifest = pipeline.run(out, "fish_audio", True, provider_kwargs={
+        "env_file": None, "ledger_path": tmp_path / "ledger.json", "opener": fake})
+    assert pipeline.validate_manifest(manifest, out) == []
+    order = next(x for x in manifest["lines"] if x["id"] == "order")
+    assert order["generation"]["candidate_index"] == 1
+    assert [c["intent"]["drink"] for c in order["stt_candidates"]][:2] == [
+        "espresso", "v60_pour_over"]
+    assert order["intent"]["drink"] == "v60_pour_over"
+    confirm = manifest["lines"][-1]
+    assert confirm["eye_keyframes"][-1][1] == "wink"
+    spend = manifest["spend"]
+    assert spend["usd_this_run_ledger"] == pytest.approx(0.03)
+    assert spend["usd_this_run_wallet_delta"] == pytest.approx(0.03)
+    assert spend["wallet_before"]["credit_usd"] == pytest.approx(5.0)
+    for path in [*out.rglob("*"), tmp_path / "ledger.json"]:
+        if path.is_file():
+            assert _DUMMY_KEY.encode() not in path.read_bytes()
+    assert not no_network
 
 
 @pytest.mark.skipif(not _HAVE_LOCAL_SPEECH, reason="needs macOS say, whisper-cli and ffmpeg")
