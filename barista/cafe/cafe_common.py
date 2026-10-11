@@ -167,16 +167,23 @@ def _overlap(a: np.ndarray, b: np.ndarray) -> bool:
     return True
 
 
+def _points_to_polygon(points: np.ndarray, poly: np.ndarray) -> float:
+    a = poly
+    b = np.roll(poly, -1, axis=0)
+    ab = b - a  # (m, 2)
+    ap = points[:, None, :] - a[None, :, :]  # (n, m, 2)
+    denom = np.maximum((ab * ab).sum(-1), 1e-30)
+    t = np.clip((ap * ab[None]).sum(-1) / denom, 0.0, 1.0)
+    closest = a[None] + t[..., None] * ab[None]
+    return float(np.linalg.norm(points[:, None, :] - closest, axis=-1).min())
+
+
 def polygon_distance(a: np.ndarray, b: np.ndarray) -> float:
-    """Distance between two convex polygons; negative-free (0 when they overlap)."""
+    """Distance between two convex polygons; 0 when they overlap."""
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
     if len(a) >= 3 and len(b) >= 3 and _overlap(a, b):
         return 0.0
-    best = math.inf
-    for poly, other in ((a, b), (b, a)):
-        for p in poly:
-            for i in range(len(other)):
-                best = min(best, _segment_distance(p, other[i], other[(i + 1) % len(other)]))
-    return best
+    return min(_points_to_polygon(a, b), _points_to_polygon(b, a))
 
 
 def transform(poly: np.ndarray, x: float, y: float, yaw: float) -> np.ndarray:

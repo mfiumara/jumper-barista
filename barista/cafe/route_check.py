@@ -245,8 +245,15 @@ def main() -> int:
     radius = float(dance["radius_m"])
     dance_hulls = []
     per_policy = {}
+    windows = dance.get("policy_windows_s", {})
+    full_run = {}
     for label in DANCES:
         hulls, _ = load_hulls(fp / f"{label}_hulls.npz")
+        full_run[label] = float(np.linalg.norm(cc.hull(np.concatenate(hulls)) - centre,
+                                               axis=1).max())
+        if label in windows:
+            dt = __import__("json").loads((fp / f"{label}.json").read_text("utf-8"))["control_dt_s"]
+            hulls = hulls[:round(float(windows[label]) / dt)]
         swept = cc.hull(np.concatenate(hulls))
         dance_hulls.append(swept)
         per_policy[label] = float(np.linalg.norm(swept - centre, axis=1).max())
@@ -255,6 +262,8 @@ def main() -> int:
     segments["dance_area"] = {
         "clearance_m": clearances([disc], groups, bar),
         "policy_footprint_radius_m": per_policy,
+        "policy_windows_s": windows,
+        "policy_full_run_footprint_radius_m": full_run,
         "max_policy_footprint_radius_m": max(per_policy.values()),
         "footprints_inside_disc": max(per_policy.values()) <= radius,
         "sample_hulls": [],

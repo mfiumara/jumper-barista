@@ -154,7 +154,12 @@
       0.0,
       0.0
     ],
-    "radius_m": 0.3
+    "radius_m": 0.34,
+    "policy_windows_s": {
+      "dance_crab": 60.0
+    },
+    "justification": "largest measured XY footprint radius (all collision geometry, about the start-slot centre) of the existing policies replayed in cafe_bar by footprints.py: dance_brazilian 0.327 m (full 66 s), jump 0.319 m (flat jump in place), dance_maze 0.318 m, dance_crab 0.318 m over its first 60 s, dance_waist 0.290 m, dance_dream_wings 0.281 m; rounded up to 0.34 m",
+    "out_of_scope": "dance_crab's full 236 s routine walks the base 0.40 m and reaches 0.58 m, which no bar this deep can hold; the film's idle beat must use at most its first 60 s (or another dance)"
   },
   "door": {
     "wall_x_m": -2.2,

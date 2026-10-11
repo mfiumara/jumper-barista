@@ -20,7 +20,7 @@ runs along +X. The customer (the camera, with no 3D human) is on the -Y side loo
 | `walk` | (0, 0) -> (0.36, 0) -> `pre_align` (0.72, 0) -> `pour_start` (0.80, 0) |
 | `pour_start_pose` | x 0.80, y 0.0, yaw 0, base z 0.10847 m: the accepted M4 `base_start` plus the station offset |
 | `d_walk` | 0.80 m |
-| `dance_area` | disc of radius 0.30 m about the start slot (dances and the in-place flat jump) |
+| `dance_area` | disc of radius 0.34 m about the start slot: the measured footprint of every existing dance and of the in-place flat jump (dance_crab limited to its first 60 s; its full 236 s routine wanders to 0.58 m) |
 | `door_chime` | site at (-2.12, -1.58, 1.12) m, above the door in the -X wall (off-camera for `customer_pov`) |
 | `customer_pov` | camera at (0, -0.95, 0.35) m, looking at (0, 0, 0.12) m, fovy 50 deg |
 
