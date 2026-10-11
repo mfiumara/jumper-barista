@@ -110,3 +110,50 @@ its visual/mass-only spout, water surface and water-mass proxy.
 
 The fast check (`run_m4.py --fast-check`) stops at the end of `pour_out`. Set-down, release and
 retreat evidence needs the full verifier.
+
+## M4R margins: 1 kHz physics and a walked stance (simulation only)
+
+A4 chains M4 after a walk, so M4 now runs at **1 kHz physics with 50 Hz keyframe targets**
+(`physics_dt_s` 0.001, decimation derived from the trajectory) and must survive an arrival a
+few millimetres or degrees off `base_start`. At 1 kHz the accepted pour passed with almost no
+margin: carried grasp translation 9.71 mm (limit 10), set-down 19.9 mm (limit 20), inward
+excursion 7.98 mm (limit 10), and the pitcher grip came within a few millimetres of the
+display module in the last turn. No gate threshold or definition changed; what changed:
+
+- **Stance re-targeting** (`barista/verification/m4_retarget.py`). The planar offset `D` of
+  `base_link` from `base_start` is measured once at the first tick. Every 20 ms a damped
+  least-squares IK on the four LF arm joints puts the measured spout outlet (palm when nothing
+  is held) at `D^-1` of the keyframe's pose, so the spiral stays centred on the bed in the
+  station's frame. At `base_start` it returns the keyframes untouched.
+- **Shorter carry.** The grip creeps slowly and steadily under the carried load (soft-contact
+  friction), so carried time is grasp translation: transit 4.0 -> 2.5 s and the same spiral
+  keyframes time-scaled 17.5 -> 16.0 s (still >= 15 s of continuous spiral for the video).
+- **Grip preload.** The claw's squeeze lead in the replay is 0.11 rad instead of 0.06
+  (`grip_squeeze_lead_rad`): 1.1 N·m of finger preload instead of 0.6, inside the servo's
+  1.2 N·m continuous rating. The whole-run torque audit still gates it (LF_J4 thermal state is
+  reported). Friction coefficients are unchanged.
+- **Spiral radius 0.85x** about the bed centre (`spiral_radius_scale`), applied to the measured
+  spout target by the same IK and eased back over the first 0.5 s of `pour_out`. It moves the
+  outer far-side turn away from the head and lowers the inward excursion of the compressed
+  sector; radial progress stays above its 15 mm gate.
+- **Set-down servo** (`set_down_servo`): during `lower` the measured pitcher origin is servoed
+  in x/y onto the pickup spot (`set_down_target_m`) with a small clamped integral, so the grip
+  creep no longer becomes set-down error. The release and retreat keep that x/y shift, so the
+  open claw leaves along the accepted path relative to where the pitcher actually stands.
+- **Reported clearance.** `summary.json` `motion.pitcher_robot_clearance` gives the minimum
+  distance between the carried pitcher (including its visual spout) and every robot collision
+  geom except the LF claw, per carried phase, confirmed on a 0.5 mm distmax ladder so a
+  spurious solver zero reads as a lower bound rather than a capped 3 or 10 mm.
+- **Memory.** The 1 kHz torque audit (about 1.2 M rows) is streamed to CSV with a running
+  summary identical to the in-memory one, so a 13-point sweep fits in RAM.
+
+Robustness sweep (each point an independent `run_m4.py --spawn-offset DX DY DYAW`, unmodified
+gates): yaw -2..+2 deg in 0.5 deg steps plus dx/dy +-2 mm.
+
+```bash
+python barista/verification/run_m4.py --out out/barista/m4 --save-render-states
+python barista/verification/m4_sweep.py --out out/barista/m4_sweep --jobs 13
+```
+
+The measured margins and the per-point table for the exact commit are in the M4R card's
+evidence comment; they are simulation results with approximate (visual) water only.

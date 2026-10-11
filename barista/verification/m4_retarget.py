@@ -41,6 +41,11 @@ ARM_JOINTS = ("LF_J0_joint", "LF_J1_joint", "LF_J2_joint", "LF_J3_joint")
 SPOUT_PHASES = frozenset({
     "lift", "lift_settle", "lift_hold", "transit", "pour_in", "spiral", "pour_out", "return",
 })
+#: After the set-down servo has moved the claw, these palm phases keep that x/y shift so the
+#: open claw leaves the pitcher along the accepted path, relative to where it really is.
+POST_SET_DOWN_PHASES = frozenset({
+    "set_down", "release", "clear_retreat", "retreat", "final_settle",
+})
 #: Below these the measured stance *is* base_start and the keyframes are not touched.
 IDENTITY_TOLERANCE_M = 1e-6
 IDENTITY_TOLERANCE_RAD = 1e-6
@@ -163,6 +168,7 @@ class StanceRetarget:
         self.lower_start_s: float | None = None
         self.max_set_down_shift_m = 0.0
         self.set_down_integral = np.zeros(2)
+        self.set_down_shift_xy: np.ndarray | None = None
         self.max_residual_m = 0.0
         self.max_correction_rad = 0.0
         self.solve_count = 0
@@ -242,7 +248,10 @@ class StanceRetarget:
             and self.pickup_pitcher_in_palm is not None
         )
         scale = self._radius_scale(phase, time_s)
-        if not self.active and not servo and scale == 1.0:
+        post_shift = (
+            self.set_down_shift_xy is not None and phase in POST_SET_DOWN_PHASES
+        )
+        if not self.active and not servo and scale == 1.0 and not post_shift:
             return arm
         assert self.offset is not None
         qpos = data.qpos.copy()
@@ -267,7 +276,8 @@ class StanceRetarget:
                 -clamp, clamp,
             )
             shifted = keyframe_point.copy()
-            shifted[:2] += fraction * (spot - keyframe_point[:2] + self.set_down_integral)
+            self.set_down_shift_xy = fraction * (spot - keyframe_point[:2] + self.set_down_integral)
+            shifted[:2] += self.set_down_shift_xy
             self.max_set_down_shift_m = max(
                 self.max_set_down_shift_m, float(np.linalg.norm(spot - keyframe_point[:2]))
             )
@@ -285,6 +295,8 @@ class StanceRetarget:
         self._set(qpos, arm)
         palm_pos, palm_rot = self._palm()
         point_target = self.offset.to_nominal_point(palm_pos + palm_rot @ point_in_palm)
+        if post_shift:
+            point_target[:2] += self.set_down_shift_xy
         if scale != 1.0:
             centre = np.asarray(self.spiral_radius_scale["centre_m"][:2], dtype=np.float64)
             point_target[:2] = centre + scale * (point_target[:2] - centre)
@@ -327,4 +339,7 @@ class StanceRetarget:
                 else self.pickup_pitcher_in_palm.tolist()
             ),
             "maximum_set_down_creep_compensation_m": self.max_set_down_shift_m,
+            "post_set_down_palm_shift_xy_m": (
+                None if self.set_down_shift_xy is None else self.set_down_shift_xy.tolist()
+            ),
         }
