@@ -68,6 +68,38 @@ The renders are front three-quarter, left side and rear three-quarter at the M4 
 pour pose with the pitcher, a frame of the brazilian dance policy and a jump-policy landing
 frame. Each image is labelled as a simulation. Renders are deliverables and are not committed.
 
+## Results (run on 2f090a3's code, 2026-10-11)
+
+**Physics.** The dressed M4 replay is byte-identical to a stock run and to the accepted M4
+replay (`cdae494`, qpos `7adf1e8e…`). `motion_substeps.csv` `65a1e623…`, `torque_substeps.csv`
+`7c6a39e7…`, `stream_samples.csv` `561a87aa…`, the qpos hash and `render_states.npz` all match,
+and `summary.json` matches apart from the commit and output paths. The dressed run passes M4.
+
+**Clearance** (`outfit_check.py clearance`, in mm; "> 30" means never within the 30 mm search):
+
+| Sweep | proud vs claws | proud vs legs | proud vs pitcher | decal vs claws |
+|---|---|---|---|---|
+| M4 replay, 2850 render frames | > 30 | 23.4 | > 30 | **0.1, intersects (below)** |
+| brazilian dance **policy** rollout, 3303 frames at 50 Hz | > 30 | 27.3 | n/a | 19.1 |
+| jump **policy** rollout, 700 frames at 200 Hz | > 30 | 19.7 | n/a | > 30 |
+| 5 dance references at 50 Hz | > 30 | ≥ 26.2 | n/a | ≥ 6.4 (maze) |
+| flat jump reference, native rate | > 30 | 19.7 (towel_back, t = 0.88 s) | n/a | > 30 |
+
+No proud part (hat, band, towel) is ever inside or within 19.7 mm of a claw, leg or the
+pitcher. Nothing enters the eye-panel box.
+
+**Known intersection, which is pre-existing.** During the M4 set-down and retreat
+(t = 46.18–53.12 s), the stock left claw (`LF_finger_link`, `LF_finger_grip_insert_link`)
+passes up to about 10 mm **into the robot's own face** under the sensors. That happens in 315
+render frames with or without the outfit, because the M4 motion is unchanged. The left
+moustache stroke (`tache_l`) is painted on that patch of face, so the claw also passes
+through the decal, in 299 frames. Nearest-neighbour clearance cannot see this (it reports
+0.1 mm), so the sweep also tests target samples for being inside each part. That test is
+what found it. A2a's "0.1 mm, grazes" was this same penetration. Fixing it needs either a
+change to the M4 retreat (which breaks hash identity, so it is out of A2b scope), a moustache
+moved off the claw path (which departs from "as is"), or a film edit that keeps
+46–53 s off camera or away from the face.
+
 ## `.skin` export: not produced
 
 The design tooling (jumper-design `918d192857fcea1678c2a40b339501004a94d838`,
