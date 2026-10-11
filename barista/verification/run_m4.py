@@ -106,6 +106,13 @@ PITCHER_ROBOT_CONFIRM_DISTMAX_M = tuple(
 ) + (0.1, 0.5, 1.0)
 
 
+def _normal_contact_force(mujoco, model, data, index: int) -> float:
+    """Read the normal force of an actual contact, never a visual distance alias."""
+    wrench = np.zeros(6)
+    mujoco.mj_contactForce(model, data, index, wrench)
+    return float(wrench[0])
+
+
 def _geom_clearance(
     mujoco, model, data, geom1: int, geom2: int, fromto,
     confirm: tuple[float, ...] = CLEARANCE_CONFIRM_DISTMAX_M,
@@ -1126,6 +1133,7 @@ def main() -> int:
                         mujoco, model, data, robot_geom, pitcher_geom, fromto,
                     )[0],
                     CLEARANCE_PREFILTER_M,
+                    contact_force=lambda index: _normal_contact_force(mujoco, model, data, index),
                 )
 
             if settled_pitcher_rot is None:
