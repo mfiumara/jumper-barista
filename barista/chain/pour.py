@@ -44,6 +44,10 @@ ARM = ("LF_J0_joint", "LF_J1_joint", "LF_J2_joint", "LF_J3_joint")
 #: Phases in which the palm (the grasp frame) is servoed: the pitcher is on the counter.
 PALM_PHASES = ("settle", "approach", "close", "lower", "set_down", "release",
                "clear_retreat", "retreat", "final_settle")
+#: Pre-grasp phases: one correction from the settled arrival stance, held (no contact loop).
+PREGRASP_PHASES = ("settle", "approach", "close")
+#: Reference control tick (0.5 s) by which the nominal replay has settled on its stance.
+PREGRASP_REF_TICK = 25
 #: Phases in which the measured spout outlet is servoed: the pitcher is in the claw.
 SPOUT_PHASES = ("lift", "lift_settle", "lift_hold", "transit", "pour_in", "spiral",
                 "pour_out", "return")
@@ -51,6 +55,8 @@ POSITION_WEIGHT = 1.0
 ORIENTATION_WEIGHT_M_PER_RAD = 0.05
 REGULARISATION_M_PER_RAD = 0.002
 IK_ITERATIONS = 8
+#: Share of a base-yaw error the carried pitcher's heading follows (see ``_Hooks.target``).
+YAW_FOLLOW = 1.0
 #: Set-down: xy integral gain (1/s) and clamp on the measured pitcher origin during ``lower``.
 LOWER_KI = 2.0
 LOWER_I_CLAMP_M = 0.015
@@ -157,6 +163,26 @@ class _Hooks:
         self._tick_cache: dict[int, tuple] = {}
         self._integral = np.zeros(3)
         self._pitcher = None
+        self._touch_correction = None
+        self._pregrasp = None
+        self._counter_geoms = None
+
+    def _pitcher_on_counter(self) -> bool:
+        import mujoco
+
+        model = self.env.sim.mj_model
+        data = self._data()
+        if self._counter_geoms is None:
+            body = self._pitcher_body()
+            self._pitcher_geoms = {g for g in range(model.ngeom) if model.geom_bodyid[g] == body}
+            self._counter_geoms = {g for g in range(model.ngeom)
+                                   if (mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, g) or "")
+                                   == "terrain"}
+        for i in range(data.ncon):
+            pair = {int(data.contact[i].geom1), int(data.contact[i].geom2)}
+            if pair & self._pitcher_geoms and pair & self._counter_geoms:
+                return True
+        return False
 
     def _pitcher_body(self) -> int:
         if self._pitcher is None:
@@ -215,10 +241,50 @@ class _Hooks:
                 raise RuntimeError(f"reference has no control tick {tick}")
             palm_cmd = ref["palm_cmd"][index]
             palm_cmd_rot = ref["palm_cmd_rot"][index].reshape(3, 3)
+            # A base-yaw error: the spout stays on the station's path exactly, while the
+            # pitcher's heading follows the robot by YAW_FOLLOW of the error (1.0: the pitcher
+            # keeps its pose relative to the robot's head, the clearance the -2 deg sweep needs).
+            dyaw = common.wrap(common.yaw_of(base_quat) - common.yaw_of(ref["base_quat"][index]))
+            half = YAW_FOLLOW * dyaw
+            rz = np.array([[math.cos(half), -math.sin(half), 0.0],
+                           [math.sin(half), math.cos(half), 0.0], [0.0, 0.0, 1.0]])
+            palm_cmd_rot = rz @ palm_cmd_rot
+            row["base_dyaw_rad"] = dyaw
             bias = np.zeros(3)
             if "setdown_bias_xy" in ref:
                 bias[:2] = np.asarray(ref["setdown_bias_xy"], dtype=float)
-            if phase == "lower" and "pitcher_cmd" in ref:
+            if (self._touch_correction is None and phase in ("lower", "set_down")
+                    and self._pitcher_on_counter()):
+                # Touchdown: run_m4 now holds the measured set-down arm. Freeze the correction
+                # of the last carried tick; the release and retreat replay the accepted joint
+                # motion offset by it, so the open claw leaves the pitcher as M4's does.
+                last = self.rows[-1] if self.rows else None
+                self._touch_correction = (np.asarray(last["arm_cmd"]) - last["arm_ref"]
+                                          if last is not None and "arm_cmd" in last
+                                          else np.zeros(len(arm)))
+                row["touchdown"] = True
+            if self._touch_correction is not None:
+                out_arm = out_arm + self._touch_correction
+                info = {}
+            elif phase in PREGRASP_PHASES:
+                # Before the grasp the open claw rests on the pitcher's grip, which rests on
+                # the counter: servoing on the measured base would close a loop through that
+                # contact (the arm pushes, the body tilts, the IK pushes harder; seen in the
+                # chain). So the correction is solved once, from a settled stance, against the
+                # reference's settled palm pose, and held until the lift.
+                info = {}
+                if self._pregrasp is None:
+                    settled = int(min(PREGRASP_REF_TICK, len(ref["tick"]) - 1))
+                    if (abs(base_pos[2] - ref["base_pos"][settled][2]) < 0.002
+                            or tick >= PREGRASP_REF_TICK):
+                        solved, info = self.ik.solve(
+                            qpos, out_arm, palm_pos=ref["palm_cmd"][settled],
+                            palm_rot=rz @ ref["palm_cmd_rot"][settled].reshape(3, 3))
+                        self._pregrasp = solved - out_arm
+                        row["pregrasp_solved"] = True
+                if self._pregrasp is not None:
+                    out_arm = out_arm + self._pregrasp
+            elif phase == "lower" and "pitcher_cmd" in ref:
                 # Set the pitcher down on its pickup spot: the accepted keyframes return it
                 # ~20 mm short (the reference's own bias); servo the measured pitcher origin
                 # onto the reference path minus that bias, with a small xy integral term.
@@ -241,9 +307,7 @@ class _Hooks:
                     qpos, out_arm, palm_rot=palm_cmd_rot,
                     spout_target=ref["spout_cmd"][index], spout_in_palm=spout_in_palm)
             else:
-                after = phase in ("set_down", "release", "clear_retreat", "retreat", "final_settle")
-                shift = (self._integral - bias) if after else np.zeros(3)
-                out_arm, info = self.ik.solve(qpos, out_arm, palm_pos=palm_cmd + shift,
+                out_arm, info = self.ik.solve(qpos, out_arm, palm_pos=palm_cmd,
                                               palm_rot=palm_cmd_rot)
             row.update(info)
             row["arm_cmd"] = out_arm
@@ -431,6 +495,15 @@ def run_pour(out: Path, *, mode: str = "retarget", reference_path: Path | None =
     if retarget is not None:
         common_json = out / "retarget.json"
         common_json.write_text(json.dumps(retarget, indent=1) + "\n", "utf-8")
+        np.savez_compressed(
+            out / "retarget_ticks.npz",
+            time_s=np.asarray([r["time_s"] for r in hooks.rows]),
+            phase=np.asarray([r["phase"] for r in hooks.rows]),
+            arm_ref=np.asarray([r["arm_ref"] for r in hooks.rows]),
+            arm_cmd=np.asarray([r["arm_cmd"] for r in hooks.rows]),
+            spout_residual_m=np.asarray([r.get("spout_residual_m", np.nan) for r in hooks.rows]),
+            palm_residual_m=np.asarray([r.get("palm_residual_m", np.nan) for r in hooks.rows]),
+            base_pos=np.asarray([r["base_pos"] for r in hooks.rows]))
     return {"exit_code": code, "passes": bool(summary["passes"]), "summary": summary,
             "retarget": retarget, "out": str(out)}
 
@@ -471,8 +544,9 @@ def _install_state_writes(robot, env, start_state, restore, torch) -> None:
         result = real_joint(jp, jv, *a, **k)
         servo = robot.actuators[0]
         if "thermal" in start_state and getattr(servo, "_thermal", None) is not None:
+            tnames = [str(n) for n in start_state.get("thermal_names", start_state["joint_names"])]
             servo._thermal[:] = torch.tensor(
-                [[float(start_state["thermal"][names.index(n)]) for n in servo.target_names]],
+                [[float(start_state["thermal"][tnames.index(n)]) for n in servo.target_names]],
                 dtype=servo._thermal.dtype)
         return result
 

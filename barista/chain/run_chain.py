@@ -245,6 +245,7 @@ def main() -> int:
     walk_end = navigation.nav_errors(chain, pre_align)
     rec.boundary("walk->align")
     # ------------------------------------------------------------ align (+ approach)
+    chain.beat = "align"
     align_hist = navigation.align_to(chain, pre_align, beat="align")
     pre_align_err = navigation.nav_errors(chain, pre_align)
     cfg = common.cafe_m4_trajectory(1.0 / common.PHYSICS_HZ, common.M4_DECIMATION_1K)
@@ -254,9 +255,14 @@ def main() -> int:
     ref = np.load(args.reference)
     arm_ik = pour.ArmIK(chain.model)
 
+    settled = pour.PREGRASP_REF_TICK  # the pour's own pre-grasp palm target (pour.py)
+
     def lf_final(qpos):
+        dyaw = common.wrap(common.yaw_of(qpos[3:7]) - common.yaw_of(ref["base_quat"][settled]))
+        c, s_ = math.cos(pour.YAW_FOLLOW * dyaw), math.sin(pour.YAW_FOLLOW * dyaw)
+        rz = np.array([[c, -s_, 0.0], [s_, c, 0.0], [0.0, 0.0, 1.0]])
         arm, _ = arm_ik.solve(qpos, np.asarray([m4_start[n] for n in pour.ARM]),
-                              palm_pos=ref["palm_cmd"][0], palm_rot=ref["palm_cmd_rot"][0].reshape(3, 3))
+                              palm_pos=ref["palm_cmd"][settled], palm_rot=rz @ ref["palm_cmd_rot"][settled].reshape(3, 3))
         return dict(zip(pour.ARM, (float(v) for v in arm), strict=True))
 
     approach_report = approach.run_approach(chain, dict(HOME), goal, m4_start, lf_final_fn=lf_final)
