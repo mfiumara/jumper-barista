@@ -1122,10 +1122,9 @@ def main() -> int:
             if phase == "spiral":
                 pair_clearance.observe(
                     model, data, time_s + dt_s,
-                    lambda robot_geom, pitcher_geom, fromto=fromto: _geom_clearance(
-                        mujoco, model, data, robot_geom, pitcher_geom, fromto,
-                        PITCHER_ROBOT_CONFIRM_DISTMAX_M,
-                    )[0],
+                    lambda robot_geom, pitcher_geom, fromto=fromto: float(
+                        mujoco.mj_geomDistance(model, data, robot_geom, pitcher_geom, 1.0, fromto)
+                    ),
                     CLEARANCE_PREFILTER_M,
                 )
 

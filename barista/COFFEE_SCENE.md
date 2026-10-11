@@ -184,7 +184,8 @@ Every other claw surface and pitcher part remains in that measurement, as does t
 All robot geoms are included, even non-colliding visual geoms; the intentional-pair list
 does not silently exempt a similarly named visual geom.
 Actual contact distances contribute to the unrestricted and non-exempt minima, preserving
-penetration rather than treating a distance-solver confirmation as positive clearance.
+penetration. Raw zero/negative geom-distance solver values are retained conservatively,
+not promoted to positive clearance through the legacy distmax confirmation ladder.
 The old non-claw metric remains for comparison; neither metric changes the run_m4 gates.
 
 The full-suite baseline at `e6765ea` failed deploy-source provenance, posture mirroring and

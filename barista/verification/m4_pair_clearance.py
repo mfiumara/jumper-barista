@@ -27,10 +27,11 @@ class PairClearance:
         self.samples = 0
 
     def observe(self, model, data, time_s, distance, prefilter_m):
-        """Near pairs use the confirmed distance; far pairs retain a lower bound.
+        """Near pairs use raw signed distance; far pairs retain a lower bound.
 
-        Actual contact distances also contribute so penetration cannot become a positive
-        clearance through the convex-distance solver's distmax confirmation ladder.
+        Raw zero/negative solver values are conservative: unlike the legacy non-claw
+        report, this report never promotes them through a distmax confirmation ladder.
+        Actual contact distances also contribute, preserving measured penetration.
         """
         gaps = (np.linalg.norm(data.geom_xpos[self.robot][:, None, :]
                                - data.geom_xpos[self.pitcher][None], axis=2)
@@ -58,5 +59,7 @@ class PairClearance:
         return {"scope": "spiral, every physics substep",
                 "robot_scope": "all robot geoms, including visual geoms and every claw surface",
                 "pitcher_scope": "all external pitcher geoms including the visual spout",
+                "distance_method": "raw signed geom distance and actual contact distance; "
+                                   "far pairs use bounding-sphere lower bounds",
                 "excluded_pairs": [list(pair) for pair in INTENTIONAL_GRASP_PAIRS],
                 "samples": self.samples, **self.minima}
