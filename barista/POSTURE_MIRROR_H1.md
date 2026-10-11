@@ -117,8 +117,8 @@ source hashes and logs in `verification.json`. Its checks are:
 
 | Command (P is the interpreter above) | Exit | Result |
 |---|---:|---|
-| `git show <base>:tests/test_posture.py` | 0 | Exact original source extracted into ignored evidence directory |
-| `P -m pytest out/barista/m4r_h1/baseline_test_posture.py -q -p no:cacheprovider` | 1 | 1 failed, 62 passed; original mirror mismatch |
+| `git show <base>:tests/test_posture.py` | 0 | Exact original source checked against detached base checkout |
+| `P -m pytest tests/test_posture.py -q -p no:cacheprovider` in detached base checkout | 1 | 1 failed, 62 passed; original mirror mismatch |
 | `P -m ruff check --stdin-filename tests/test_posture.py -` with exact base source | 1 | Same 13 inherited diagnostics |
 | `P -m pytest tests/test_posture.py -q -p no:cacheprovider` | 0 | 79 passed, 19 warnings |
 | `P -m pytest tests/test_posture.py -q -k mirror -p no:cacheprovider` | 0 | 17 passed, 62 deselected, 1 warning |
@@ -129,6 +129,17 @@ source hashes and logs in `verification.json`. Its checks are:
 Initial clean-base logs are `before-tests.log` and `before-ruff.log`; the repeatable
 comparison is `baseline-posture.log` / `final-posture.log`. `complete-diff.log`
 contains the reviewed patch. The final evidence archive is attached to this card.
+
+The repeat baseline uses a detached worktree created by
+`git worktree add --detach out/barista/m4r_h1_base <base>` (exit 0), with its own
+cwd and `PYTHONPATH=<base-worktree>:<base-worktree>/rl`. Its exact HEAD, clean
+status and actual import roots are recorded separately. An initial attempt to
+rerun the entire original file after extracting it under `out/` caused two extra
+`FileNotFoundError` failures: the export tests locate `scripts/` relative to their
+own file. That attempt is not a valid baseline comparison; its log and manifest
+are retained as `relocated-baseline-invalid*`. The original clean-base run was
+unaffected. The runner now verifies the proper layout and checks the actual
+`1 failed, 62 passed` result, not merely an expected nonzero exit code.
 
 Known warnings: inherited TorchScript deprecation and MuJoCo attachment timestep/
 integrator warnings. No tests skipped or xfailed. No full-suite or whole-repository
