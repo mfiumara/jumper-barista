@@ -287,3 +287,26 @@ def test_polygon_distance_helper() -> None:
     assert cc.polygon_distance(square, square + [2.0, 0.0]) == pytest.approx(1.0)
     assert cc.polygon_distance(square, square + [0.5, 0.5]) == 0.0
     assert cc.polygon_distance(square, square + [2.0, 2.0]) == pytest.approx(math.sqrt(2))
+
+
+def test_grasp_approach_check_classifies_support_and_measures_distance() -> None:
+    """The exemption sweep lets only the stance contacts touch the bar, and its geom
+    distance agrees with the true gap between two separated geoms."""
+    import mujoco
+
+    route_check = _load("route_check")
+    model = mujoco.MjModel.from_xml_string("""
+    <mujoco><worldbody>
+      <geom name="robot/LM_foot_tip_link_meshcol" type="box" size=".01 .01 .01" pos="0 0 .01"/>
+      <geom name="robot/RF_palm_pad_b_link_meshcol" type="box" size=".01 .01 .01" pos=".1 0 .01"/>
+      <geom name="robot/LF_finger_tip_link_meshcol" type="box" size=".01 .01 .01" pos="0 .1 .01"/>
+      <geom name="terrain" type="box" size=".5 .5 .02" pos="0 0 -.05"/>
+    </worldbody></mujoco>""")
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    support = {n for g in range(model.ngeom)
+               if route_check._support_geom(model, g) for n in [cc.geom_name(model, g)]}
+    assert support == {"robot/LM_foot_tip_link_meshcol", "robot/RF_palm_pad_b_link_meshcol"}
+    value, consistent = route_check._distance(model, data, 0, 3)
+    assert consistent and value == pytest.approx(0.03, abs=1e-6)
+    assert "pitcher" in route_check.GRASP_APPROACH_EXEMPTION

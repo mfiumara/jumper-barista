@@ -39,6 +39,14 @@ OBSTACLE_GROUPS = {
     "kettle": ("cafe_kettle_",),
     "cup_stack": ("cafe_cup_",),
 }
+GRASP_APPROACH_EXEMPTION = (
+    "Supervisor decision on A1: pre_align -> pour_start is the accepted M4 grasp approach and is "
+    "exempt from the 30 mm clearance. pour_start must equal the accepted M4 start, and contact "
+    "with the pitcher there is the grasp. Conditions: start -> pre_align keeps >= 30 mm (turn and "
+    "walk checks); no contact or penetration with the V60, server or bar top (foot support "
+    "aside) along the segment (3D sweep); the transfer replay passes every M4 gate "
+    "(run_m4_transfer.py)."
+)
 DANCES = ("dance_crab", "dance_brazilian", "dance_dream_wings", "dance_maze", "dance_waist",
           "jump")
 
@@ -94,8 +102,22 @@ def load_hulls(path: Path) -> tuple[list[np.ndarray], np.ndarray]:
     return [points[edges[i]:edges[i + 1]] for i in range(len(sizes))], data["base_xy"]
 
 
-def pour_start_configuration(d: dict) -> dict:
-    """The accepted M4 start state at the pour-start pose, measured in the cafe."""
+def _support_geom(model, g: int) -> bool:
+    """A robot geom that may rest on the bar top while standing: the four foot tips and the
+    two front claws' palm pads (the six stance contacts, all 2.0 mm above the bar at HOME)."""
+    return any(t in cc.geom_name(model, g) for t in ("_foot_tip_", "_palm_pad_"))
+
+
+def pour_start_configuration(d: dict, sweep_xy: list[tuple[float, float]] | None = None) -> dict:
+    """The accepted M4 start state at the pour-start pose, measured in the cafe.
+
+    With ``sweep_xy`` it also sweeps the base along those points (yaw and base height of
+    the pour-start pose) in two configurations, the HOME walking stance and the M4 start
+    configuration, and measures in 3D (MuJoCo ``mj_geomDistance``) every robot collision
+    geom against the V60, server, pitcher and the bar top. This is the grasp-approach
+    exemption check: no penetration or contact with anything but the pitcher, except foot
+    support on the bar.
+    """
     import mujoco
     import torch
     from mjlab.envs import ManagerBasedRlEnv
@@ -145,20 +167,125 @@ def pour_start_configuration(d: dict) -> dict:
                     any(name.startswith(t) for t in tokens)
                 if hit:
                     groups3d[group].append(g)
-        fromto = np.zeros(6)
         distance3d = {}
         for group, members in groups3d.items():
             best = (math.inf, "", "")
             for g in members:
                 for r in geoms:
-                    value = float(mujoco.mj_geomDistance(model, data, r, g, 1.0, fromto))
+                    value, _ = _distance(model, data, r, g)
                     if value < best[0]:
                         best = (value, cc.geom_name(model, r), cc.geom_name(model, g))
             distance3d[group] = {"distance_m": best[0], "robot_geom": best[1],
                                  "obstacle_geom": best[2]}
-        return {"hull_world": poly, "hull_local": local, "clearance_3d": distance3d}
+        result = {"hull_world": poly, "hull_local": local, "clearance_3d": distance3d}
+        if sweep_xy:
+            def place(x: float, y: float, joints: np.ndarray) -> None:
+                pose = root.clone()
+                pose[0, 0], pose[0, 1] = x, y
+                q = torch.tensor(joints[None, :], dtype=torch.float, device=resolution.device)
+                robot.write_root_link_pose_to_sim(pose)
+                robot.write_joint_state_to_sim(q, torch.zeros_like(q))
+                env.sim.forward()
+                mujoco.mj_forward(model, data)
+
+            home = np.asarray([HOME[n] for n in robot.joint_names], dtype=np.float64)
+            result["align_sweep_3d"] = _align_sweep(
+                model, data, place, {"home_stance": home, "m4_start_configuration": initial},
+                geoms, groups3d, sweep_xy)
+        return result
     finally:
         env.close()
+
+
+def _distance(model, data, r: int, g: int) -> tuple[float, bool]:
+    """``mj_geomDistance`` with its witness segment as a sanity check.
+
+    For some mesh-vs-box pairs MuJoCo 3.11 returns 0 while its own witness segment is
+    centimetres long; such a value is not a contact. Returns (distance, consistent)."""
+    import mujoco
+
+    fromto = np.zeros(6)
+    value = float(mujoco.mj_geomDistance(model, data, r, g, 0.2, fromto))
+    if value >= 0.2:
+        return 0.2, True
+    segment = float(np.linalg.norm(fromto[3:] - fromto[:3]))
+    if value >= 0.0 and abs(segment - value) > 1e-4:
+        return segment, False
+    return value, True
+
+
+def _align_sweep(model, data, place, configurations, geoms, groups3d, sweep_xy) -> dict:
+    """Grasp-approach exemption check along pre_align -> pour_start, in 3D.
+
+    For each configuration and base position it records (1) every MuJoCo contact
+    (``mj_collision``, as used by the physics, margins included) between the robot and
+    the V60, server, pitcher or bar top; (2) the minimum ``mj_geomDistance`` to the V60,
+    server and pitcher; (3) the lowest vertex of every non-support robot collision mesh
+    above the bar-top plane. Support geoms (feet, front palm pads) are allowed to touch
+    the bar; contact with the pitcher is the grasp and is allowed.
+    """
+    bar = {g for g in range(model.ngeom)
+           if cc.geom_name(model, g) == "terrain" or "bar_top_ext_" in cc.geom_name(model, g)}
+    terrain = next(g for g in bar if cc.geom_name(model, g) == "terrain")
+    targets = {"v60_and_cues": set(groups3d["v60_and_cues"]), "server": set(groups3d["server"]),
+               "pitcher": set(groups3d["pitcher"]), "bar": bar}
+    robot = set(geoms)
+    support = {r for r in geoms if _support_geom(model, r)}
+    configs = {}
+    for label, joints in configurations.items():
+        best: dict[str, tuple] = {k: (math.inf, "", "", None) for k in targets if k != "bar"}
+        inconsistent = 0
+        contacts: dict[str, dict] = {}
+        lowest = (math.inf, "", None)
+        for x, y in sweep_xy:
+            place(x, y, joints)
+            bar_top = float(data.geom_xpos[terrain][2] + model.geom_size[terrain][2])
+            for i in range(data.ncon):
+                c = data.contact[i]
+                pair = (int(c.geom1), int(c.geom2))
+                r, o = pair if pair[0] in robot else pair[::-1]
+                if r not in robot or o in robot:
+                    continue
+                for key, members in targets.items():
+                    if o not in members or (key == "bar" and r in support):
+                        continue
+                    tag = f"{key}:{cc.geom_name(model, r)}:{cc.geom_name(model, o)}"
+                    entry = contacts.setdefault(tag, {"min_dist_m": math.inf, "at_base_x_m": []})
+                    entry["min_dist_m"] = min(entry["min_dist_m"], float(c.dist))
+                    if round(float(x), 4) not in entry["at_base_x_m"]:
+                        entry["at_base_x_m"].append(round(float(x), 4))
+            for key, members in targets.items():
+                if key == "bar":
+                    continue
+                for g in members:
+                    for r in geoms:
+                        value, ok = _distance(model, data, r, g)
+                        inconsistent += not ok
+                        if value < best[key][0]:
+                            best[key] = (value, cc.geom_name(model, r), cc.geom_name(model, g),
+                                         [float(x), float(y)])
+            for r in geoms:
+                if r in support:
+                    continue
+                height = float(cc.geom_points(model, data, r)[:, 2].min()) - bar_top
+                if height < lowest[0]:
+                    lowest = (height, cc.geom_name(model, r), [float(x), float(y)])
+        configs[label] = {
+            "min_distance_m": {k: {"distance_m": v[0], "robot_geom": v[1], "obstacle_geom": v[2],
+                                   "at_base_xy_m": v[3]} for k, v in best.items()},
+            "lowest_non_support_vertex_above_bar_m": {"height_m": lowest[0],
+                                                      "robot_geom": lowest[1],
+                                                      "at_base_xy_m": lowest[2]},
+            "contacts": contacts,
+            "geom_distance_values_replaced_by_witness_segment": inconsistent,
+        }
+    return {
+        "samples": len(sweep_xy),
+        "support_geoms": sorted(cc.geom_name(model, r) for r in support),
+        "configurations": configs,
+        "note": "kinematic sweep: base at the pour-start height and yaw, legs at HOME, 1 cm "
+                "steps; distances capped at 0.2 m",
+    }
 
 
 def plot(path: Path, d: dict, groups, segments: dict, dance_hulls, walk_base) -> None:
@@ -289,20 +416,22 @@ def main() -> int:
     route = d["route"]
     pre = next(w for w in route["walk"] if w["name"] == "pre_align")
     pour = route["pour_start_pose"]
-    m4 = pour_start_configuration(d)
-    end_local = walk_hulls[-1] - walk_base[-1]
-    samples = []
     count = max(2, round(math.hypot(pour["x_m"] - pre["x_m"],
                                         pour["y_m"] - pre["y_m"]) / 0.01) + 1)
-    for s in np.linspace(0.0, 1.0, count):
-        x = pre["x_m"] + s * (pour["x_m"] - pre["x_m"])
-        y = pre["y_m"] + s * (pour["y_m"] - pre["y_m"])
+    sweep_xy = [(pre["x_m"] + s * (pour["x_m"] - pre["x_m"]),
+                 pre["y_m"] + s * (pour["y_m"] - pre["y_m"])) for s in np.linspace(0.0, 1.0, count)]
+    m4 = pour_start_configuration(d, sweep_xy)
+    end_local = walk_hulls[-1] - walk_base[-1]
+    samples = []
+    for x, y in sweep_xy:
         samples.append(end_local + [x, y])
         samples.append(cc.transform(m4["hull_local"], x, y, math.radians(pour["yaw_deg"])))
     segments["align"] = {
         "clearance_m": clearances(samples, groups, bar),
         "clearance_at_pour_start_m4_configuration_m": clearances([m4["hull_world"]], groups, bar),
         "clearance_3d_at_pour_start_m": m4["clearance_3d"],
+        "sweep_3d": m4["align_sweep_3d"],
+        "exemption": GRASP_APPROACH_EXEMPTION,
         "sample_hulls": samples[::4] + [samples[-1]],
         "note": "pre_align -> pour_start is the grasp approach of the accepted M4 start: "
                 "the pitcher is the object the claw is about to take, so its clearance here "
@@ -315,6 +444,18 @@ def main() -> int:
         >= REQUIRED_CLEARANCE_M,
         "turn_clear_30mm": min(segments["turn"]["clearance_m"].values()) >= REQUIRED_CLEARANCE_M,
         "walk_clear_30mm": min(segments["walk"]["clearance_m"].values()) >= REQUIRED_CLEARANCE_M,
+        # Supervisor exemption: pre_align -> pour_start is the M4 grasp approach. It must
+        # not touch or penetrate the V60, server or bar (foot support aside); pitcher
+        # contact is the grasp. The 30 mm figures below are reported, not gated.
+        "align_3d_no_contact_v60_server_bar": all(
+            not any(t.split(":")[0] != "pitcher" for t in cfg["contacts"])
+            and min(cfg["min_distance_m"]["v60_and_cues"]["distance_m"],
+                    cfg["min_distance_m"]["server"]["distance_m"]) > 0.0
+            and cfg["lowest_non_support_vertex_above_bar_m"]["height_m"] > 0.0
+            for cfg in m4["align_sweep_3d"]["configurations"].values()
+        ),
+    }
+    exempt = {
         "align_clear_30mm_of_fixed_props_dressing_and_edges": min(
             v for k, v in segments["align"]["clearance_m"].items() if k != "pitcher"
         ) >= REQUIRED_CLEARANCE_M,
@@ -329,10 +470,11 @@ def main() -> int:
         "required_clearance_m": REQUIRED_CLEARANCE_M,
         "method": "2D distance between XY convex hulls of all robot collision geometry and of "
                   "each obstacle geom (conservative: ignores height); 3D mj_geomDistance at the "
-                  "pour-start pose",
+                  "pour-start pose and along pre_align -> pour_start",
         "segments": {k: {kk: vv for kk, vv in v.items() if kk != "sample_hulls"}
                      for k, v in segments.items()},
         "checks": checks,
+        "exempt_informational_checks": exempt,
         "passes": all(checks.values()),
         "plot": str(plot_path),
     }
@@ -348,8 +490,18 @@ def main() -> int:
     print(f"[cafe-route] dance/jump footprint radius max "
           f"{segments['dance_area']['max_policy_footprint_radius_m']:.4f} m vs dance_area "
           f"{radius:.3f} m; gait width {segments['walk']['gait_width']}")
+    sweep = m4["align_sweep_3d"]
+    for label, cfg in sweep["configurations"].items():
+        low = cfg["lowest_non_support_vertex_above_bar_m"]
+        print(f"[cafe-route] 3D sweep pre_align -> pour_start ({sweep['samples']} poses, {label}): "
+              + ", ".join(f"{k} min {v['distance_m'] * 1000:.1f} mm ({v['robot_geom']} vs "
+                          f"{v['obstacle_geom']})" for k, v in cfg["min_distance_m"].items())
+              + f"; lowest non-support vertex {low['height_m'] * 1000:.1f} mm above bar "
+              f"({low['robot_geom']}); contacts {sorted(cfg['contacts']) or 'none'}")
     for k, v in checks.items():
         print(f"[cafe-route] {k}: {v}")
+    for k, v in exempt.items():
+        print(f"[cafe-route] exempt (grasp approach, informational) {k}: {v}")
     print(f"[cafe-route] plot: {plot_path}")
     return 0 if report["passes"] else 1
 

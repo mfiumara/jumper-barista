@@ -73,11 +73,10 @@ records the cafe.
   ribs from 5 mm to 85 mm) has an included angle of about 34 degrees. A true 60-degree visual
   cone at that rim would have to be either shorter than the accepted ribs or wider than the
   collision geometry, and would then hide real clearances. The visual shell therefore follows
-  the accepted ribs. Changing the dripper geometry is a decision for the supervisor, since it
-  changes the accepted M4 scene.
+  the accepted ribs. Per the supervisor's decision, A1 keeps the accepted dripper unchanged; a
+  display-only cone correction is a separate card.
 - Route clearance uses 2D XY convex hulls of all of Jumper's collision geometry, which is
-  conservative. The last segment (`pre_align` -> `pour_start`) is the accepted M4 grasp approach,
-  so the pitcher is close by design. There the transfer replay is the gate.
+  conservative.
 - The walking evidence holds the existing `jumper.posture` policy at constant commands. The
   continuous chain (dance -> chime -> jump -> turn -> walk -> align -> pour) is A4's job.
 - Licence audit: there are no third-party assets. All geometry is MJCF primitives authored by
@@ -85,3 +84,29 @@ records the cafe.
   (`scenes/cafe_bar.py::_wood_png`, fixed seed), and the floor uses MuJoCo's built-in checker.
   `barista/SOURCES.md` already covers project-authored primitive scenes, so nothing new is
   recorded there.
+
+## Grasp-approach exemption (supervisor decision)
+
+`pre_align` (0.72, 0) -> `pour_start` (0.80, 0) is the accepted M4 grasp approach. It is
+exempt from the 30 mm route clearance, because `pour_start` must equal the accepted M4 start
+and the claw touching the pitcher there is the grasp itself. The exemption holds under three
+conditions, all checked:
+
+1. `start_slot` -> `pre_align` keeps >= 30 mm. The `turn_clear_30mm` and `walk_clear_30mm`
+   checks in `route_check.py` cover this; the closest object is the pitcher at 58 mm.
+2. Along the segment there is no contact or penetration with the V60, the server or the bar
+   top. Foot tips and front palm pads may rest on the bar; contact with the pitcher is allowed.
+   `route_check.py` sweeps the base in 1 cm steps, in both the HOME stance and the M4 start
+   configuration, and logs three things:
+   - MuJoCo's own contacts (`mj_collision`);
+   - `mj_geomDistance` to the V60, server and pitcher;
+   - the lowest non-support vertex above the bar.
+
+   The gate is `align_3d_no_contact_v60_server_bar`. MuJoCo 3.11 sometimes returns 0 for a
+   mesh-vs-box pair whose own witness segment is centimetres long. The check then uses the
+   segment length, and counts these cases in the JSON.
+3. The transfer replay (`run_m4_transfer.py`) passes every M4 gate.
+
+The arm must already be in the M4 keyframe-0 pose before the last centimetres. If Jumper walked
+into `pour_start` in the HOME stance, its LF palm would go 29 mm into the pitcher body. The
+motion chain (A4) therefore has to raise the arm before the final approach.
