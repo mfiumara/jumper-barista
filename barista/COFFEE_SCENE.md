@@ -124,7 +124,8 @@ display module in the last turn. No gate threshold or definition changed; what c
   `base_link` from `base_start` is measured once at the first tick. Every 20 ms a damped
   least-squares IK on the four LF arm joints puts the measured spout outlet (palm when nothing
   is held) at `D^-1` of the keyframe's pose, so the spiral stays centred on the bed in the
-  station's frame. At `base_start` it returns the keyframes untouched.
+  station's frame. At `base_start` the stance correction is inactive; the spiral-radius and
+  set-down corrections still apply.
 - **Shorter carry.** The grip creeps slowly and steadily under the carried load (soft-contact
   friction), so carried time is grasp translation: transit 4.0 -> 2.5 s and the same spiral
   keyframes time-scaled 17.5 -> 16.0 s (still >= 15 s of continuous spiral for the video).
@@ -152,8 +153,40 @@ gates): yaw -2..+2 deg in 0.5 deg steps plus dx/dy +-2 mm.
 
 ```bash
 python barista/verification/run_m4.py --out out/barista/m4 --save-render-states
-python barista/verification/m4_sweep.py --out out/barista/m4_sweep --jobs 13
+python barista/verification/m4_sweep.py --out out/barista/m4_sweep --jobs 2
 ```
 
 The measured margins and the per-point table for the exact commit are in the M4R card's
 evidence comment; they are simulation results with approximate (visual) water only.
+
+### Release/retreat continuation and stricter clearance reporting
+
+The 2 s clear-retreat and 2 s retreat disturbed the released pitcher through contact with
+`LF_palm_link_meshcol1/2`. At yaw +0.5 degrees and dx +2 mm its speed in `final_settle`
+reached 0.082 and 0.085 m/s respectively. Doubling both retreat segments to 4 s, without
+changing their endpoints or any gate, reduced those final-settle maxima to 0.00000370 and
+0.00000275 m/s in the targeted replays. The final hold remains 3 s, now at 54.5–57.5 s.
+This is a slower retreat, not a collision-free release: palm contact and pitcher disturbance
+still occur before the final hold. The 16 s spiral is unchanged.
+
+The earlier 6.67 mm nominal clearance excluded the whole claw and is **not** evidence for
+the stricter all-non-grasp-surface requirement. The independent
+`motion.pitcher_robot_pair_clearance` report samples every spiral physics substep and gives
+both the unrestricted minimum and the minimum excluding only these opposing intentional
+grasp pairs (robot geom, pitcher geom):
+
+| Robot geom | Pitcher geom |
+|---|---|
+| `robot/LF_finger_grip_insert_link_meshcol` | `bar_top_grip_collar_a` |
+| `robot/LF_palm_grip_insert_link_meshcol` | `bar_top_grip_collar_b` |
+
+Every other claw surface and pitcher part remains in that measurement, as does the display.
+Actual contact distances contribute to the unrestricted and non-exempt minima, preserving
+penetration rather than treating a distance-solver confirmation as positive clearance.
+The old non-claw metric remains for comparison; neither metric changes the run_m4 gates.
+
+The full-suite baseline at `e6765ea` failed deploy-source provenance, posture mirroring and
+one tensorboard port test. The continuation before the pair-metric addition had 1036 passed,
+25 skipped and the same first two failures; whole-repository ruff had 348 errors both before
+and after. These are unmet full-green acceptance criteria, not a waiver. No third-party
+assets were added, and no hardware run is implied.

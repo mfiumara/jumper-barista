@@ -12,6 +12,7 @@ import json
 import math
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -107,6 +108,49 @@ def test_clearance_excludes_only_the_claw_and_the_water_proxies():
 
 
 # --------------------------------------------------------------------------- rate / parser
+def test_pair_clearance_exempts_only_exact_grasp_pairs_and_keeps_penetration():
+    module = _load("m4_pair_clearance")
+    names = {
+        0: "robot/LF_finger_grip_insert_link_meshcol",
+        1: "robot/LF_palm_grip_insert_link_meshcol",
+        2: "robot/LF_palm_pad_b_link_meshcol",
+        3: "bar_top_grip_collar_a", 4: "bar_top_grip_collar_b",
+        5: "bar_pitcher_body", 6: "robot/display_module_link_meshcol",
+    }
+    tracker = module.PairClearance([0, 1, 2, 6], [3, 4, 5], names)
+    model = SimpleNamespace(geom_rbound=np.zeros(7))
+    data = SimpleNamespace(geom_xpos=np.zeros((7, 3)), ncon=1,
+                           contact=[SimpleNamespace(geom1=3, geom2=0, dist=-0.001)])
+    distances = {(0, 3): 0.003, (1, 4): 0.0, (2, 4): 0.002, (6, 5): 0.006}
+    tracker.observe(model, data, 22.0, lambda a, b: distances.get((a, b), 0.05), 0.1)
+    result = tracker.report()
+    assert result["unrestricted"]["minimum_m"] == -0.001
+    excluded = result["excluding_intentional_grasp_pairs"]
+    assert excluded["minimum_m"] == 0.002
+    assert excluded["nearest_pair"] == [names[2], names[4]]
+    assert len(result["excluded_pairs"]) == 2
+    # A different pitcher part touching the exempt finger is still included.
+    data.contact = [SimpleNamespace(geom1=0, geom2=5, dist=-0.0002)]
+    tracker.observe(model, data, 23.0, lambda a, b: 0.05, 0.1)
+    assert tracker.report()["excluding_intentional_grasp_pairs"]["minimum_m"] == -0.0002
+
+
+def test_pair_clearance_far_pairs_are_conservative_and_head_is_not_exempt():
+    module = _load("m4_pair_clearance")
+    names = {index: name for index, name in enumerate(
+        [name for pair in module.INTENTIONAL_GRASP_PAIRS for name in pair]
+        + ["robot/display_module_link_meshcol", "bar_spout_tip"])}
+    tracker = module.PairClearance([4], [5], names)
+    model = SimpleNamespace(geom_rbound=np.zeros(6))
+    positions = np.zeros((6, 3))
+    positions[5, 0] = 1.0
+    data = SimpleNamespace(geom_xpos=positions, ncon=0, contact=[])
+    def unexpected(*args):
+        raise AssertionError("far pair should use its bounding-sphere lower bound")
+    tracker.observe(model, data, 1.0, unexpected, 0.1)
+    assert tracker.report()["excluding_intentional_grasp_pairs"]["minimum_m"] == 1.0
+
+
 def test_m4_trajectory_runs_at_1khz_with_50hz_targets():
     config = json.loads(TRAJECTORY.read_text("utf-8"))
     assert config["physics_dt_s"] == 0.001
@@ -159,6 +203,12 @@ def _summary(passes: bool) -> dict:
             "spout_height_min_m": 0.03, "spout_height_max_m": 0.04, "pour_duration_s": 18.0,
             "minimum_pitcher_brewer_clearance_all_phases_m": 0.004,
             "minimum_robot_brewer_clearance_all_phases_m": 0.02,
+            "pitcher_robot_pair_clearance": {
+                "unrestricted": {"minimum_m": -0.001, "nearest_pair": ["a", "b"]},
+                "excluding_intentional_grasp_pairs": {
+                    "minimum_m": 0.002, "nearest_pair": ["c", "d"],
+                },
+            },
             "pitcher_robot_clearance": {"by_scope": {
                 "carried": {"minimum_m": 0.009, "nearest_pair": "a;b", "time_s": 30.0},
                 "spiral": {"minimum_m": 0.011, "nearest_pair": "a;b", "time_s": 31.0},
@@ -181,6 +231,8 @@ def test_sweep_point_row_reports_every_gate_and_the_margins(tmp_path):
     assert good["carried_grasp_translation_mm"] == pytest.approx(7.1)
     assert good["set_down_error_mm"] == pytest.approx(12.0)
     assert good["min_pitcher_robot_clearance_carried_mm"] == pytest.approx(9.0)
+    assert good["spiral_unrestricted_clearance_mm"] == pytest.approx(-1.0)
+    assert good["spiral_excluding_intentional_grasp_pairs_clearance_mm"] == pytest.approx(2.0)
     assert good["motion.carried_grasp_translation"] is True and good["torque"] is True
     assert not bad["passes"] and bad["failing_gates"] == "motion.carried_grasp_translation"
     assert bad["dx_mm"] == pytest.approx(2.0)

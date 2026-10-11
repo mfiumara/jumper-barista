@@ -679,7 +679,7 @@
     },
     {
       "phase": "clear_retreat",
-      "end_s": 48.5,
+      "end_s": 50.5,
       "arm_rad": [
         -0.535,
         -1.98,
@@ -690,7 +690,7 @@
     },
     {
       "phase": "retreat",
-      "end_s": 50.5,
+      "end_s": 54.5,
       "arm_rad": [
         -0.55,
         -2.5878028667900996,
@@ -701,7 +701,7 @@
     },
     {
       "phase": "final_settle",
-      "end_s": 53.5,
+      "end_s": 57.5,
       "arm_rad": [
         -0.55,
         -2.5878028667900996,
@@ -768,7 +768,7 @@
     "maximum_horizontal_launch_speed_m_s": 0.2,
     "minimum_brewer_clearance_m": 0.0
   },
-  "set_down_note": "pitcher returns to its pickup spot: upright pour-out pose, lower to the grasp pose while the body lowers (44.5-47.5 s), contact-triggered release; the open claw then lifts straight up from its measured contact pose (clear_retreat blends from the held set-down arm, J1 only, no yaw) so the palm separates without dragging the released pitcher, then rises clear",
+  "set_down_note": "Pitcher returns to its pickup spot with contact-triggered release. clear_retreat blends from the measured contact arm to the re-targeted keyframe over 4 s; retreat rises clear over another 4 s. These slower segments leave final_settle at 54.5-57.5 s. Palm contact can still disturb the released pitcher during retreat; the unchanged retreat-motion and final-settle gates audit that disturbance.",
   "grip_squeeze_lead_rad": 0.11,
   "set_down_servo": {
     "ramp_s": 1.5,

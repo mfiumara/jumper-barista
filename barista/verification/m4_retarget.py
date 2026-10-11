@@ -25,8 +25,8 @@ offset in the measured palm frame) is servoed in x/y onto the pickup spot ``targ
 keyframe keeps the height), with a small clamped integral on the measured error, ramped in
 over ``ramp_s`` so the claw never steps. This servo runs in the nominal stance as well.
 
-With the robot exactly at ``base_start`` (``D`` within :data:`IDENTITY_TOLERANCE`) the
-keyframes are returned unchanged, bit for bit, so the nominal replay is the accepted one.
+With the robot exactly at ``base_start`` (``D`` within the identity tolerances), stance
+correction is inactive. Configured spiral-radius and set-down corrections still apply.
 No residual RL, no learned component: the reference keyframes plus inverse kinematics only.
 """
 

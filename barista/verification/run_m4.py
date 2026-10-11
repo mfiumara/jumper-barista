@@ -794,6 +794,11 @@ def main() -> int:
         index for index in robot_collision_geoms
         if not _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index).startswith(CLAW_PREFIXES)
     ], dtype=np.int64)
+    pair_clearance = _load_sibling("m4_pair_clearance").PairClearance(
+        robot_geom_array, pitcher_shape_array,
+        {index: _name(model, mujoco, mujoco.mjtObj.mjOBJ_GEOM, index)
+         for index in range(model.ngeom)},
+    )
 
     nominal_dt_s = float(config["physics_dt_s"])
     dt_s = float(model.opt.timestep)
@@ -1111,6 +1116,16 @@ def main() -> int:
                 )
             else:
                 pitcher_robot_clearance, pitcher_robot_pair = math.inf, ""
+
+            if phase == "spiral":
+                pair_clearance.observe(
+                    model, data, time_s + dt_s,
+                    lambda robot_geom, pitcher_geom, fromto=fromto: _geom_clearance(
+                        mujoco, model, data, robot_geom, pitcher_geom, fromto,
+                        PITCHER_ROBOT_CONFIRM_DISTMAX_M,
+                    )[0],
+                    CLEARANCE_PREFILTER_M,
+                )
 
             if settled_pitcher_rot is None:
                 tilt = base_roll = base_pitch = base_drift = lift = 0.0
@@ -1700,6 +1715,7 @@ def main() -> int:
                 row["brewer_clearance_m"] for row in motion_rows
             ),
             "pitcher_robot_clearance": _pitcher_robot_clearance_summary(motion_rows),
+            "pitcher_robot_pair_clearance": pair_clearance.report(),
             "minimum_robot_brewer_clearance_all_phases_m": minimum_robot_brewer_clearance,
             "nearest_robot_brewer_pair": nearest_robot_row["robot_brewer_nearest_pair"],
             "nearest_robot_brewer_time_s": nearest_robot_row["time_s"],

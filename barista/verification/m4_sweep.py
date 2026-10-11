@@ -90,6 +90,10 @@ def point_row(name: str, offset: tuple[float, float, float], exit_code: int,
         clearance["spiral"]["minimum_m"] * 1000.0 if "spiral" in clearance else float("nan")
     )
     row["pitcher_robot_nearest_pair"] = clearance["carried"]["nearest_pair"]
+    pair_clearance = summary["motion"]["pitcher_robot_pair_clearance"]
+    for scope in ("unrestricted", "excluding_intentional_grasp_pairs"):
+        row[f"spiral_{scope}_clearance_mm"] = pair_clearance[scope]["minimum_m"] * 1000.0
+        row[f"spiral_{scope}_nearest_pair"] = ";".join(pair_clearance[scope]["nearest_pair"])
     torque = [v for v in summary["torque"]["per_joint_and_phase"].values()
               if v["phase"] == "whole_run"]
     row["torque_peak_nm"] = max(v["peak_applied_abs_nm"] for v in torque)
@@ -115,7 +119,7 @@ def write_table(rows: list[dict], path: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--jobs", type=int, default=7)
+    parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--points", nargs="*", default=None, help="subset of the grid names")
     parser.add_argument("--trajectory", type=Path, default=None)
     parser.add_argument("--keep-csv", action="store_true",
