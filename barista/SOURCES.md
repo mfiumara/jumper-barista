@@ -19,9 +19,14 @@
 - Rockchip v2.3.2 licence inspected at
   https://raw.githubusercontent.com/airockchip/rknn-toolkit2/v2.3.2/LICENSE
   (SHA256 `d846f57d942c7dfdca7b8b54f9e8bb39e1e226790dc4f5ee205d6fd678961720`).
-  It contains acceptance-by-opening-or-use wording. Setup stopped for Mattia's
-  decision under this card's explicit acceptance gate. No header or runtime was
-  fetched, incorporated, or redistributed; no Apache-2.0 grant is asserted.
+  It contains acceptance-by-opening-or-use wording. Mattia accepted this licence
+  on 2026-10-12 for local use of the pinned files via
+  `deploy/fsm/vendor/rknpu2/fetch.sh` only (recorded on task `t_88ae5e12`).
+  No committing, redistribution, or inclusion in pushed/packaged artifacts beyond
+  upstream's build is authorized. No Apache-2.0 grant is asserted.
+  No header or runtime has been fetched: the approved script downloads both,
+  while this card prohibits fetching the runtime. Header-only acquisition needs
+  an explicit scope clarification; licence acceptance itself is no longer blocked.
 - CycloneDDS 11.0.1 remote tag resolves to
   `e54e991f75a3e67f8e628da3171122e36ea5b872` at
   https://github.com/eclipse-cyclonedds/cyclonedds.git . No source was downloaded

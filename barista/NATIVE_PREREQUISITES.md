@@ -1,8 +1,42 @@
 # Native prerequisite checkpoint (M4R-H2b)
 
 Task `t_88ae5e12`, base `db258afa9749d18f8a6250b0d75faad153ad9af6`.
-Observed on macOS arm64, 2026-10-11. This is a blocked setup checkpoint,
+Initial observation on macOS arm64, 2026-10-11. This is a blocked setup checkpoint,
 not a successful build, provenance verification, or M4R acceptance.
+
+## Resume checkpoint — 2026-10-12
+
+Resume HEAD: `141c6218782781cd53f0982cbdbd2403b92bb7b2`; tracked tree
+was clean. Mattia's acceptance recorded on this card resolves the licence gate
+below, but restricts acquisition to `deploy/fsm/vendor/rknpu2/fetch.sh` only.
+The unchanged script lists both the header and runtime at lines 25–28 and
+downloads each missing entry at lines 39–67. It has no header-only option.
+Running it would violate the card's explicit prohibition on runtime download;
+bypassing it would violate the newly recorded acquisition restriction.
+
+Required decision: authorize header-only acquisition using the exact URL and
+SHA256 already pinned in that script, without fetching the runtime. Alternatively,
+authorize a separately scoped header-only script option. Neither change is
+assumed here. The licence need not be accepted again.
+
+Poteto-mode activation receipt: read
+`~/.claude/skills/poteto-mode/SKILL.md`, its canonical
+`~/.claude/skills/pstack/SKILL.md`, and `pstack/playbooks/session-pickup.md`
+in full. Applied the portable method directly; no CLI invocation, profile change,
+or substitute agent process is required. Session-pickup checklist:
+
+- Recovered the exact card, prior checkpoint and downstream review dependency.
+- Read the recent acceptance and compared it with the actual fetch script.
+- Verified clean tracked state and exact resume HEAD with Git (exit 0).
+- Reconstructed the invariant: header-only, local, pinned, no runtime download.
+- Falsified the assumption that the approved script can fetch only the header.
+- Stopped the first unproven acquisition step at the conflicting authorization.
+- Preserved this updated checkpoint; no costly build was repeated.
+
+No delegation was needed for this bounded scope check. No source download,
+build, link/load probe, or provenance test was executed during this resume.
+Completeness and negative controls remain unverified. The historical discovery
+and first-attempt results below are retained, not represented as new execution.
 
 ## Licence gate — stop before SDK download
 
