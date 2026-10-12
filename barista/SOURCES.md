@@ -24,11 +24,22 @@
   `deploy/fsm/vendor/rknpu2/fetch.sh` only (recorded on task `t_88ae5e12`).
   No committing, redistribution, or inclusion in pushed/packaged artifacts beyond
   upstream's build is authorized. No Apache-2.0 grant is asserted.
-  No header or runtime has been fetched: the approved script downloads both,
-  while this card prohibits fetching the runtime. Header-only acquisition needs
-  an explicit scope clarification; licence acceptance itself is no longer blocked.
+  The manager's final answer on `t_88ae5e12` explicitly authorizes direct download
+  of only the pinned header from tag v2.3.2 into the script's ignored path.
+  Header URL: https://raw.githubusercontent.com/airockchip/rknn-toolkit2/v2.3.2/rknpu2/runtime/Linux/librknn_api/include/rknn_api.h
+  Required SHA256: `c48e11a6f41b451a5fd1e4ad774ea60252d3d94f78bee9b21ea3d21b21deba9a`.
+  Never run the runtime-fetching script, download the runtime, or redistribute SDK files.
 - CycloneDDS 11.0.1 remote tag resolves to
   `e54e991f75a3e67f8e628da3171122e36ea5b872` at
-  https://github.com/eclipse-cyclonedds/cyclonedds.git . No source was downloaded
-  and its licence audit/build remain pending. This is not an added asset.
+  https://github.com/eclipse-cyclonedds/cyclonedds.git . Continuation `t_dfaf7b4a`
+  fetched and verified this exact HEAD before building, with a clean source tree.
+  `git archive --format=tar HEAD` SHA256:
+  `025c5cd000babe569c8eb3b1692bc3a2a09966b31a91b45babc55332425671d9`.
+  Source `LICENSE` and `NOTICE.md` declare EPL-2.0 OR BSD-3-Clause
+  (Eclipse Distribution License 1.0); local use follows the permissive EDL option.
+  Notice also lists libmd5-rfc under Zlib and getopt 1.5 as public domain.
+  Exact licence: https://github.com/eclipse-cyclonedds/cyclonedds/blob/e54e991f75a3e67f8e628da3171122e36ea5b872/LICENSE
+  SHA256 `d4486603568510bb9a1e6c5ee239a46ec513de55593e86176ccd81a5fdd3cfa3`.
+  `NOTICE.md` SHA256 `dfe2fcb64896f2fb49a749496cf858524c4972331070a3c0efbf4e8f932b6ace`.
+  Source and installed binaries remain ignored under `out/toolchain`, not redistributed.
 - See `NATIVE_PREREQUISITES.md` for the bounded checkpoint and resume conditions.

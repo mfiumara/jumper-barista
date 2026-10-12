@@ -1,10 +1,94 @@
-# Native prerequisite checkpoint (M4R-H2b)
+# Native prerequisite execution (M4R-H2b)
 
 Task `t_88ae5e12`, base `db258afa9749d18f8a6250b0d75faad153ad9af6`.
-Initial observation on macOS arm64, 2026-10-11. This is a blocked setup checkpoint,
-not a successful build, provenance verification, or M4R acceptance.
+Initial observation on macOS arm64, 2026-10-11. Continuation `t_dfaf7b4a`
+ran on 2026-10-12 from `ba9184d56688b7fe0eafc4f6e672c52d80c114ee`.
 
-## Resume checkpoint — 2026-10-12
+## Current result — bounded execution complete, provenance FAIL
+
+The manager's final answer authorizes direct pinned-header-only acquisition.
+Mattia's licence acceptance stands; neither gate needs asking again.
+Only `rknn_api.h` was fetched, verified and placed in the ignored vendor path.
+No runtime was downloaded and the SDK is not committed or redistributed.
+
+CycloneDDS source HEAD was verified as
+`e54e991f75a3e67f8e628da3171122e36ea5b872` (11.0.1); source/licence
+hashes are in `SOURCES.md`. Configure, build (two jobs), install, `idlc -v`,
+architecture/dependency inspection, native probe compile and run all exited 0.
+Actual version: `idlc (Eclipse Cyclone DDS) 11.0.1`.
+The probe printed `CycloneDDS native link/load and QoS allocation succeeded
+(no participant).` It opens no DDS participant or robot bus.
+
+Installed prefix: `out/toolchain/cyclonedds-install` in this worktree.
+All installed executables/dylibs inspected are Mach-O arm64. CMake discovered
+existing Homebrew OpenSSL; `libddsc` depends on `/opt/homebrew/opt/openssl@3/lib/`
+`libssl.3.dylib` and `libcrypto.3.dylib`. No Homebrew command or global install
+was run. This prefix is machine-local, not a self-contained distributable.
+
+- `libddsc.11.0.1.dylib` SHA256:
+  `dcf70f0c92154e7499dac03fff2a3977dc40b178ead6b5157e19b89472ec3e39`.
+- Installed `include/dds/dds.h` SHA256:
+  `34ef07e510d2743ed75c86861297267c78271b6f30abccabf41e139862e90257`.
+- Rockchip header SHA256:
+  `c48e11a6f41b451a5fd1e4ad774ea60252d3d94f78bee9b21ea3d21b21deba9a`.
+
+The unchanged default-feature provenance test exited **1**, `1 failed in 27.44s`.
+Cargo build returned 0 (the test passed its line 96 assertion). Hook-presence
+at line 109 passed. Completeness at line 114 failed on these generated inputs:
+
+```
+out/toolchain/cargo-target/debug/build/mjrl-fsm-e4860612e6df1d20/out/idl_bindings.rs
+out/toolchain/cargo-target/debug/build/mjrl-fsm-e4860612e6df1d20/out/task_hooks.rs
+```
+
+Negative controls at line 117 were **not reached**. `_uncovered` currently
+excludes only `deploy/fsm/target` and paths outside the repository (line 52).
+The required isolated target is inside this worktree, so generated files enter
+the source comparison. Smallest handoff: supervisor/reviewer must scope a
+generated-build-input classification fix or explicitly revise the target-location
+contract. No test/Rust/source-list edit, relocated target, or second test attempt
+was used to turn this failure green. Successful native build/load is not successful
+provenance, full prerequisite acceptance, or M4R acceptance.
+
+### Reproduce (local authorization only)
+
+From this worktree root, first clone and verify source and read its licences:
+
+```sh
+git clone --depth 1 --branch 11.0.1 https://github.com/eclipse-cyclonedds/cyclonedds.git out/toolchain/cyclonedds-source
+git -C out/toolchain/cyclonedds-source rev-parse HEAD
+git -C out/toolchain/cyclonedds-source archive --format=tar HEAD -o ../receipts/cyclonedds-source.tar
+```
+
+Create `out/toolchain/receipts` before the archive command. Compare source and
+licence hashes with `SOURCES.md` before the build. Fetch only the header URL
+recorded there with `curl -fLsS --max-time 60`, to the ignored destination plus
+`.part`; verify its SHA256 before renaming to `include/rknn_api.h`. Do not run
+`fetch.sh`. Existing valid source/header can be reused without downloading again.
+
+```sh
+python3 barista/native_prerequisites.py build
+python3 barista/native_prerequisites.py verify
+python3 barista/native_prerequisites.py test --python /Users/mattiafiumara/repos/jumper-barista/.worktrees/t_2c59bb36/.venv/bin/python
+```
+
+The runner uses only stdlib; test interpreter is existing Python 3.12.13 borrowed
+read-only. System Python measured 3.14.7 (outside simulator support range), used
+only for the stdlib runner/detector. No venv was modified. PATH, CYCLONEDDS_HOME,
+offline Cargo, single Cargo job, isolated target/temp and checkout PYTHONPATH are
+child-only. Exact commands/exits are in `out/toolchain/receipts/commands.jsonl`;
+all output logs, installed header/dylib hashes and test environment are beside it.
+`REPORT.txt` binds final SHA and text-log hashes. No full environment/gates,
+simulation/replay/torque validation, deployment or hardware claim is made.
+
+Poteto activation: read alias, canonical pstack skill and session-pickup playbook
+in full; applied the portable method directly. Recovered card/authorization,
+checked clean resume SHA, reconstructed header-only invariant, falsified prior
+missing-prerequisite state by real build/probe/test, and stopped at the first
+out-of-scope source fix. No delegation was needed for this serialized bounded lane;
+independent review remains the existing downstream card. No CLI/profile change.
+
+## Historical resume checkpoint — superseded by final manager approval
 
 Resume HEAD: `141c6218782781cd53f0982cbdbd2403b92bb7b2`; tracked tree
 was clean. Mattia's acceptance recorded on this card resolves the licence gate
@@ -38,7 +122,7 @@ build, link/load probe, or provenance test was executed during this resume.
 Completeness and negative controls remain unverified. The historical discovery
 and first-attempt results below are retained, not represented as new execution.
 
-## Licence gate — stop before SDK download
+## Historical licence gate — resolved before continuation
 
 The public pinned licence at
 https://raw.githubusercontent.com/airockchip/rknn-toolkit2/v2.3.2/LICENSE
@@ -82,7 +166,7 @@ The expected header SHA256 remains unverified because no header was downloaded:
   `e54e991f75a3e67f8e628da3171122e36ea5b872`. This is remote tag discovery,
   not a downloaded-source hash or licence audit. No CycloneDDS source was fetched.
 
-## Resume contract (not executed)
+## Historical resume contract (now executed above)
 
 After explicit gate resolution and mode activation, use only task-owned
 `out/toolchain` directories. Inspect CycloneDDS source licences at the exact
@@ -102,6 +186,6 @@ No skip, mock, hidden Cargo, or feature reduction is allowed. It must reach the
 hook-presence assertion at line 109, completeness at 114, and negative controls
 at 117. If a subsequent failure needs source changes, preserve it and hand off.
 
-Current stage: licence review only. No build, link/load probe, or test was run
-in this attempt. Previous H2's missing-IDLC failure is not a result of this run.
+At that historical checkpoint the stage was licence review only; no build,
+link/load probe or test had run. Current continuation results are above.
 No motion, replay, torque recertification, deployment, or publication was performed.
