@@ -95,10 +95,17 @@ render frames with or without the outfit, because the M4 motion is unchanged. Th
 moustache stroke (`tache_l`) is painted on that patch of face, so the claw also passes
 through the decal, in 299 frames. Nearest-neighbour clearance cannot see this (it reports
 0.1 mm), so the sweep also tests target samples for being inside each part. That test is
-what found it. A2a's "0.1 mm, grazes" was this same penetration. Fixing it needs either a
-change to the M4 retreat (which breaks hash identity, so it is out of A2b scope), a moustache
-moved off the claw path (which departs from "as is"), or a film edit that keeps
-46–53 s off camera or away from the face.
+what found it. A2a's "0.1 mm, grazes" was this same penetration.
+
+**Manager disposition (2026-10-12, `t_1e7bda35`, decision c).** Accept the outfit against
+the current M4 with this clip window documented; keep the moustache exactly as picked.
+The claw-through-face is a real pre-existing M4 self-collision, not an outfit defect.
+Its retreat fix belongs to the existing M4R lane (`t_2c59bb36`), not a duplicate outfit
+or motion card. **The final film must use the fixed retreat**; hiding the clip by camera
+choice is not the resolution. This exception does not assert collision-free current M4
+motion or approve an unreviewed M4R candidate. The hash-identity evidence above remains
+against the accepted old M4; final integration must revalidate the outfit with the reviewed
+fixed motion. No geometry or motion was changed for this disposition.
 
 ## `.skin` export: not produced
 
